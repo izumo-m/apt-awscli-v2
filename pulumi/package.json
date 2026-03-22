@@ -1,0 +1,35 @@
+{
+  "name": "apt-awscli-v2-pulumi",
+  "version": "1.0.0",
+  "scripts": {
+    "bootstrap": "ts-node scripts/bootstrap.ts",
+    "build": "tsc",
+    "preview": "ts-node scripts/preview.ts",
+    "up": "ts-node scripts/up.ts",
+    "up:iam": "ts-node scripts/up-iam.ts",
+    "invoke": "ts-node scripts/invoke.ts",
+    "logs": "ts-node scripts/logs.ts",
+    "destroy": "ts-node scripts/destroy.ts",
+    "stack:ls": "pulumi stack ls",
+    "config": "pulumi config",
+    "confirm-subscription": "ts-node scripts/confirm-subscription.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.1014.0",
+    "@aws-sdk/client-lambda": "^3.1014.0",
+    "@aws-sdk/client-s3": "^3.1014.0",
+    "@aws-sdk/client-sns": "^3.1014.0",
+    "@aws-sdk/client-ssm": "^3.1014.0",
+    "@pulumi/aws": "^7.23.0",
+    "@pulumi/command": "^1.2.1",
+    "@pulumi/pulumi": "^3.227.0",
+    "js-yaml": "^4.1.1",
+    "openpgp": "^6.3.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^25.5.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  }
+}

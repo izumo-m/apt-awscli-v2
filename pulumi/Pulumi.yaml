@@ -1,0 +1,4 @@
+name: apt-awscli-v2
+runtime: nodejs
+main: src/index.ts
+description: APT repository for AWS CLI v2 on S3 — Pulumi infrastructure

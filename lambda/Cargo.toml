@@ -1,0 +1,57 @@
+[package]
+name = "apt-awscli-v2-lambda"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+
+[lib]
+name = "apt_awscli_v2_lambda"
+path = "src/lib.rs"
+
+[[bin]]
+name = "apt-awscli-v2-lambda"
+path = "src/main.rs"
+
+[dependencies]
+# Lambda
+lambda_runtime = "0.13"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# AWS SDK
+aws-config = { version = "1", features = ["behavior-version-latest"] }
+aws-sdk-s3 = "1"
+aws-sdk-ssm = "1"
+
+# HTTP / download
+reqwest = { version = "0.13", default-features = false, features = ["stream", "blocking", "rustls", "rustls-native-certs"] }
+
+# Archive operations
+zip = "8"
+tar = "0.4"
+zstd = { version = "0.13", features = ["zstdmt"] }
+ar = "0.9"
+
+# GPG signing
+pgp = "0.19"
+rand = "0.8"
+
+# Hashing
+sha1 = "0.10"
+sha2 = "0.10"
+md-5 = "0.10"
+
+# Utilities
+flate2 = "1"
+chrono = "0.4"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "json", "env-filter"] }
+anyhow = "1"
+regex = "1"
+futures = "0.3"
+filetime = "0.2"
+glob = "0.3"
+
+[dev-dependencies]
+tempfile = "3"

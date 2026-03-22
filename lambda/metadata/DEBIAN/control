@@ -1,0 +1,7 @@
+Package: awscli-v2
+Version: ${VERSION}
+Section: utils
+Priority: optional
+Architecture: ${ARCH}
+Maintainer: ${APT_AWSCLI_V2_NAME} <${APT_AWSCLI_V2_EMAIL}>
+Description: AWS Command Line Interface v2
