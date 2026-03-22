@@ -1,0 +1,14 @@
+#!/bin/bash
+set -e
+
+if [ "$1" = "configure" ]; then
+    # If the zip version is installed in /usr/local/bin, it may take precedence
+    # over /usr/bin/aws due to PATH priority, so display a warning
+    if [ -e /usr/local/bin/aws ]; then
+        echo "WARNING: /usr/local/bin/aws exists and may take precedence over /usr/bin/aws." >&2
+        echo "         If you previously installed AWS CLI v2 via the zip installer," >&2
+        echo "         consider removing it: sudo rm /usr/local/bin/aws /usr/local/bin/aws_completer" >&2
+    fi
+fi
+
+exit 0

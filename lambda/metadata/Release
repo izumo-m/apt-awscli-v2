@@ -1,0 +1,6 @@
+Origin: apt-awscli-v2
+Label: ${LABEL}
+Suite: ${CODENAME}
+Codename: ${CODENAME}
+Architectures: ${ARCHS}
+Components: main
