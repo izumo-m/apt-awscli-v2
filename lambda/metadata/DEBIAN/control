@@ -4,4 +4,5 @@ Section: utils
 Priority: optional
 Architecture: ${ARCH}
 Maintainer: ${APT_AWSCLI_V2_NAME} <${APT_AWSCLI_V2_EMAIL}>
+Homepage: https://github.com/aws/aws-cli
 Description: AWS Command Line Interface v2
