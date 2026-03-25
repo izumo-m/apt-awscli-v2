@@ -21,7 +21,6 @@
     "@aws-sdk/client-sns": "^3.1014.0",
     "@aws-sdk/client-ssm": "^3.1014.0",
     "@pulumi/aws": "^7.23.0",
-    "@pulumi/command": "^1.2.1",
     "@pulumi/pulumi": "^3.227.0",
     "js-yaml": "^4.1.1",
     "openpgp": "^6.3.0"

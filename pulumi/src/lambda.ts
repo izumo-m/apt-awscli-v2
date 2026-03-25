@@ -1,7 +1,6 @@
 import * as path from "path";
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
-import * as command from "@pulumi/command";
 import { AppConfig } from "./config";
 import { watchedFiles, computeSourceHash } from "./lambdaSource";
 
@@ -56,17 +55,15 @@ export function createLambda(
     };
 
     // ─── Lambda Function ──────────────────────────────────────────────────────
-    // Use an AssetArchive with embedded sourceHash for the code property, fixed with ignoreChanges.
-    // Actual code deployment is handled by the lambdaCode Command (aws lambda update-function-code).
-    // This prevents code diffs from appearing in preview even after rm -fr pulumi.out.
-    // Non-code changes like memorySize, timeout, and environment variables are tracked by this resource.
+    // The archive must exist before Pulumi evaluates (built by checkAndBuild in up.ts/preview.ts).
+    // sourceHash includes lambdaArch, so changing architecture also changes the archive path.
+    const archivePath = path.resolve(__dirname, `../pulumi.out/.cache/${sourceHash}.zip`);
+
     const lambdaFn = new aws.lambda.Function(lambdaName, {
         name: lambdaName,
         runtime: "provided.al2023",
         architectures: [cfg.lambdaArch],
-        code: new pulumi.asset.AssetArchive({
-            ".source-hash": new pulumi.asset.StringAsset(sourceHash),
-        }),
+        code: new pulumi.asset.FileArchive(archivePath),
         handler: "bootstrap",
         role: lambdaRole.arn,
         memorySize: cfg.lambdaMemorySize,
@@ -74,27 +71,8 @@ export function createLambda(
         ephemeralStorage: { size: cfg.lambdaEphemeralStorage },
         environment: { variables: lambdaEnvVars },
     }, {
-        ignoreChanges: ["code"],  // Don't let Pulumi track code since the lambdaCode Command manages it
         dependsOn: [lambdaRole, lambdaRolePolicy, logGroup],
     });
-
-    // ─── Lambda Code ─────────────────────────────────────────────────────────
-    // Deploy code when sourceHash or arch changes.
-    // Build is already done by npm run up via checkAndBuild() (src/check-and-build.ts).
-    // Runs with the assumption that lambdaFn exists (dependsOn).
-    // The update-lambda-code.ts script performs the actual deployment (via AWS SDK).
-    // The script is invoked via ts-node. cwd is pulumi/src/, so ../ references pulumi/.
-    // BUILD_OUTPUT_HASH and APT_AWSCLI_V2_LAMBDA_NAME are passed via environment.
-    const codeCmd = `../node_modules/.bin/ts-node ../scripts/update-lambda-code.ts`;
-    new command.local.Command(`${lambdaName}-code`, {
-        create: codeCmd,
-        update: codeCmd,
-        environment: {
-            BUILD_OUTPUT_HASH:         sourceHash,
-            APT_AWSCLI_V2_LAMBDA_NAME: lambdaName,
-        },
-        triggers: [sourceHash, cfg.lambdaArch],
-    }, { dependsOn: [lambdaFn] });
 
     return { lambdaFn, logGroup };
 }
