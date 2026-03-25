@@ -8,6 +8,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import { spawnSync } from "child_process";
+import { watchedFiles, computeSourceHash } from "./lambdaSource";
 
 // Absolute paths to lambda/ and pulumi.out/ from src/
 const LAMBDA_DIR   = path.resolve(__dirname, "..", "..", "lambda");
@@ -16,6 +17,11 @@ const PULUMI_OUT   = path.resolve(__dirname, "..", "pulumi.out");
 /**
  * Ensures that the Lambda archive (.cache/{hash}.zip) exists.
  * If the archive already exists, the build is skipped.
+ *
+ * After a successful build, the source hash is recomputed because the build
+ * may update files included in the hash (e.g. Cargo.lock).  If the hash has
+ * changed, the archive is renamed so that Pulumi finds it at the correct path.
+ *
  * @param sourceHash    Current source hash
  * @param lambdaArch    Lambda architecture (arm64 / x86_64)
  */
@@ -47,4 +53,13 @@ export function checkAndBuild(sourceHash: string, lambdaArch: string): void {
 
     if (result.error) throw result.error;
     if (result.status !== 0) process.exit(result.status ?? 1);
+
+    // Recompute hash after build — the build may have updated watched files
+    // (e.g. Cargo.lock when Cargo.toml version changes).
+    const newHash = computeSourceHash(watchedFiles(LAMBDA_DIR), LAMBDA_DIR, [lambdaArch]);
+    if (newHash !== sourceHash) {
+        const newZip = path.join(PULUMI_OUT, ".cache", `${newHash}.zip`);
+        fs.renameSync(outputZip, newZip);
+        process.stdout.write(`build: source hash changed after build (${sourceHash.slice(0, 12)} -> ${newHash.slice(0, 12)}), archive renamed\n`);
+    }
 }
