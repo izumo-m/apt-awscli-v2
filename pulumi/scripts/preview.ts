@@ -1,7 +1,7 @@
 /**
  * Wrapper for pulumi preview.
+ * Builds the Lambda archive if needed (Pulumi evaluates FileArchive during the plan phase).
  * When --diff is specified, displays the source diff against the deployed code beforehand.
- * No build is performed during preview (the buildLambda Command handles that during up).
  *
  * Usage:
  *   npm run preview [-- <pulumi preview options>]
@@ -11,22 +11,26 @@
 import { spawnSync } from "child_process";
 import { LocalWorkspace } from "@pulumi/pulumi/automation";
 import {
-    PULUMI_DIR,
-    getLambdaArch, showSourceDiff, handleError,
+    PULUMI_DIR, LAMBDA_DIR,
+    getLambdaArch, createLambdaAsset, showSourceDiff, handleError,
     getPulumiEnv, getCurrentStackName, ensureStackConfig,
     extractDeployedHash,
 } from "./preflight";
+import { checkAndBuild } from "../src/check-and-build";
 
 async function main(): Promise<void> {
     const stackName = getCurrentStackName();
     ensureStackConfig(stackName);
 
-    const pulumiEnv = getPulumiEnv();
+    const pulumiEnv  = getPulumiEnv();
+    const lambdaArch = getLambdaArch();
+
+    // Build if needed — the archive must exist before Pulumi evaluates the FileArchive.
+    const currentHash = createLambdaAsset(LAMBDA_DIR, lambdaArch).hash;
+    checkAndBuild(currentHash, lambdaArch);
 
     if (process.argv.includes("--diff")) {
         try {
-            const lambdaArch = getLambdaArch();
-
             const stack = await LocalWorkspace.selectStack(
                 { workDir: PULUMI_DIR, stackName },
                 pulumiEnv["PULUMI_BACKEND_URL"]
