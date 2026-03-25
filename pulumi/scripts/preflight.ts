@@ -1,11 +1,10 @@
 /**
  * pre-flight: Module responsible for Lambda builds and source diff display.
  *
- * ## bootstrap.zip guarantee
- * pulumi up / preview evaluates FileArchive hashes during the plan phase, so it fails
- * if the archive does not exist even when no ZIP deployment is needed.
- * Calling ensureZip() before the pulumi command ensures pulumi up works correctly
- * even in a clean environment.
+ * ## Build guarantee
+ * Pulumi evaluates FileArchive hashes during the plan phase, so the archive
+ * must exist before any pulumi command.  checkAndBuild() (src/check-and-build.ts)
+ * is called from up.ts / preview.ts to ensure this.
  *
  * ## Archive cache
  * Built archives are placed at pulumi.out/.cache/{hash}.zip (PulumiAsset).
@@ -28,7 +27,7 @@ import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
 import * as yaml from "js-yaml";
-import { LocalWorkspace, Deployment } from "@pulumi/pulumi/automation";
+import { Deployment } from "@pulumi/pulumi/automation";
 import { collectFiles, watchedFiles, computeSourceHash } from "../src/lambdaSource";
 import { PulumiAsset } from "../src/pulumiAsset";
 
@@ -183,13 +182,28 @@ export function showSourceDiff(deployedHash: string, lambdaArch: string): void {
 
 /**
  * Extract the deployed source hash from the Automation API exportStack() result.
- * References the environment.BUILD_OUTPUT_HASH of command:local:Command resources.
+ * Reads the Lambda Function's code.path (FileArchive) which contains the hash in the filename.
+ * Falls back to the legacy Command-based format for backward compatibility during migration.
  */
 export function extractDeployedHash(deployment: Deployment): string {
     type Resource = {
         type?: string;
-        inputs?: { environment?: { BUILD_OUTPUT_HASH?: string; BUILD_OUTPUT_ZIP?: string; BUILD_EXPECTED_HASH?: string } };
+        inputs?: {
+            code?: { path?: string };
+            environment?: { BUILD_OUTPUT_HASH?: string; BUILD_OUTPUT_ZIP?: string; BUILD_EXPECTED_HASH?: string };
+        };
     };
+    for (const r of (deployment.deployment?.resources ?? []) as Resource[]) {
+        // Current: extract hash from Lambda code FileArchive path (.cache/{hash}.zip)
+        if (r.type === "aws:lambda/function:Function") {
+            const codePath = r.inputs?.code?.path;
+            if (codePath) {
+                const match = codePath.match(/([0-9a-f]{64})\.zip$/);
+                if (match) return match[1];
+            }
+        }
+    }
+    // Legacy: extract from Command resource environment
     for (const r of (deployment.deployment?.resources ?? []) as Resource[]) {
         if (r.type === "command:local:Command") {
             const env = r.inputs?.environment;
@@ -203,25 +217,6 @@ export function extractDeployedHash(deployment: Deployment): string {
         }
     }
     return "";
-}
-
-/**
- * Retrieve the deployed source hash from Pulumi state.
- * Returns "" if retrieval fails (first deploy, state error, etc.).
- */
-export async function getDeployedHash(stackName: string, pulumiEnv: NodeJS.ProcessEnv): Promise<string> {
-    try {
-        const stack = await LocalWorkspace.selectStack(
-            { workDir: PULUMI_DIR, stackName },
-            pulumiEnv["PULUMI_BACKEND_URL"]
-                ? { envVars: { PULUMI_BACKEND_URL: pulumiEnv["PULUMI_BACKEND_URL"] } }
-                : undefined,
-        );
-        const deployment = await stack.exportStack();
-        return extractDeployedHash(deployment);
-    } catch {
-        return "";
-    }
 }
 
 // ─── Build ──────────────────────────────────────────────────────────────────
