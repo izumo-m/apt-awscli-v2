@@ -71,6 +71,18 @@ When modified, the source hash changes, triggering an automatic rebuild and rede
 | `metadata/DEBIAN/postinst` | `src/builder.rs` | Post-install script for deb (displays a PATH priority warning if the zip-based `/usr/local/bin/aws` exists) |
 | `metadata/Release` | `src/apt_index.rs` | APT `Release` / `InRelease` file template |
 
+## index.html Generation
+
+The top-level `README.md` is converted to HTML at compile time via `build.rs` using [pulldown-cmark](https://github.com/pulldown/pulldown-cmark),
+and deployed to S3 as `index.html`. This allows the repository root URL to display the README content in a browser.
+
+The generated file is also copied to `target/index.html` for local preview:
+
+```bash
+cargo check
+open target/index.html
+```
+
 ## Prerequisites
 
 - Docker

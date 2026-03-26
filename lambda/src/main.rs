@@ -153,8 +153,8 @@ async fn handler_inner(
         deploy::deploy_all(&config, &s3_client, &ssm_client, &packages_with_dates).await?;
     } else {
         info!("No new versions to deploy.");
-        // Always sync README.md since it may change with code updates
-        deploy::sync_readme(&config, &s3_client).await?;
+        // Always sync index.html since it may change with code updates
+        deploy::sync_index_html(&config, &s3_client).await?;
     }
 
     let versions: serde_json::Value = {

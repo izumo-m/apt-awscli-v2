@@ -10,7 +10,7 @@ use tracing::info;
 use crate::config::{Config, Package};
 use crate::{apt_index, s3_sync, sign};
 
-const README: &str = include_str!("../../README.md");
+const INDEX_HTML: &str = include_str!(concat!(env!("OUT_DIR"), "/index.html"));
 
 /// Deploy all packages: prune old versions, regenerate indexes, sign, and sync to S3.
 /// `packages_with_dates` is a list of (package, release_date) pairs.
@@ -91,9 +91,9 @@ pub async fn deploy_all(
         signer.clearsign(&release_path, &inrelease_path)?;
     }
 
-    // Generate README.md
-    std::fs::write(format!("{repo_dir}/README.md"), README)
-        .context("Failed to write README.md")?;
+    // Generate index.html
+    std::fs::write(format!("{repo_dir}/index.html"), INDEX_HTML)
+        .context("Failed to write index.html")?;
 
     // 5. Sync to S3 (once for all packages)
     info!("Syncing to S3...");
@@ -122,12 +122,12 @@ pub async fn deploy_all(
                 content_type: None,
             },
         },
-        // README.md may be updated
+        // index.html may be updated
         s3_sync::MetadataRule {
-            pattern: "README.md".to_string(),
+            pattern: "index.html".to_string(),
             metadata: s3_sync::ObjectMetadata {
                 cache_control: Some("public, max-age=86400".to_string()),
-                content_type: Some("text/plain; charset=utf-8".to_string()),
+                content_type: Some("text/html; charset=utf-8".to_string()),
             },
         },
     ];
@@ -145,33 +145,33 @@ pub async fn deploy_all(
     Ok(())
 }
 
-/// Sync README.md to S3.
+/// Sync index.html to S3.
 /// Called independently of deploy_all so that README changes are reflected
 /// even when there are no new package versions.
-pub async fn sync_readme(
+pub async fn sync_index_html(
     config: &Config,
     s3_client: &S3Client,
 ) -> Result<()> {
     let repo_dir = config.repo_dir();
-    let readme_path = format!("{repo_dir}/README.md");
+    let index_path = format!("{repo_dir}/index.html");
 
-    // Write README.md to local repo dir
-    std::fs::write(&readme_path, README).context("Failed to write README.md")?;
+    // Write index.html to local repo dir
+    std::fs::write(&index_path, INDEX_HTML).context("Failed to write index.html")?;
 
     // Upload with content_type
     let key = match config.s3_prefix.as_deref() {
-        Some(p) => format!("{p}/README.md"),
-        None => "README.md".to_string(),
+        Some(p) => format!("{p}/index.html"),
+        None => "index.html".to_string(),
     };
-    let data = ByteStream::from(README.as_bytes().to_vec());
-    info!("Syncing README.md -> s3://{}/{key}", config.s3_bucket);
+    let data = ByteStream::from(INDEX_HTML.as_bytes().to_vec());
+    info!("Syncing index.html -> s3://{}/{key}", config.s3_bucket);
     s3_client
         .put_object()
         .bucket(&config.s3_bucket)
         .key(&key)
         .body(data)
         .cache_control("public, max-age=86400")
-        .content_type("text/plain; charset=utf-8")
+        .content_type("text/html; charset=utf-8")
         .send()
         .await
         .with_context(|| format!("Failed to put s3://{}/{key}", config.s3_bucket))?;
