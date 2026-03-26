@@ -469,6 +469,40 @@ With `resourcePrefix = "your-prefix"` and `s3Uri = "s3://your-apt-bucket/apt/"`:
 | EventBridge Schedule | `your-prefix-schedule` |
 | CloudWatch Log Group | `/aws/lambda/your-prefix-lambda` |
 
+## Versioning
+
+This project uses [Semantic Versioning](https://semver.org/) with a single version for the entire project.
+
+- **Source of truth**: `pulumi/package.json` (`"version"` field)
+- **Git tag format**: `vX.Y.Z` (created after successful deploy)
+- `lambda/Cargo.toml` version is set to `0.0.0` (not managed independently)
+
+### Release Workflow
+
+1. **Bump version** (in the `develop` branch):
+
+   ```bash
+   cd pulumi
+   npm version patch   # or minor / major
+   ```
+
+   This updates `package.json` and `package-lock.json` without creating a git tag (configured via `.npmrc`).
+
+2. **Commit, push, and merge** to `main` via pull request.
+
+3. **Deploy**:
+
+   ```bash
+   npm run up
+   ```
+
+4. **Tag the release** (after successful deploy):
+
+   ```bash
+   git tag vX.Y.Z
+   git push --tags
+   ```
+
 ## Redeploying After Lambda Source Updates
 
 After editing `../lambda/src/` or similar files, simply run `pulumi up` from this directory.
