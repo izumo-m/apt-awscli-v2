@@ -35,6 +35,7 @@ export function watchedFiles(baseDir: string): string[] {
         path.join(baseDir, "Cargo.toml"),
         path.join(baseDir, "Cargo.lock"),
         path.join(baseDir, "rust-toolchain.toml"),
+        path.join(baseDir, "build.rs"),
         path.join(baseDir, "..", "README.md"),
     ];
 }
