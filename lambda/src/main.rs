@@ -49,8 +49,8 @@ async fn handler_inner(
     // 1. Load config
     let config = config::Config::from_env()?;
     info!(
-        "Config: archs={:?}, workdir={}, bucket={}, prefix={:?}, packages={:?}",
-        config.archs, config.workdir, config.s3_bucket, config.s3_prefix,
+        "Config: archs={:?}, bucket={}, prefix={:?}, packages={:?}",
+        config.archs, config.s3_bucket, config.s3_prefix,
         config.packages.iter().map(|p| p.file_prefix()).collect::<Vec<_>>(),
     );
 

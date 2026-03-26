@@ -1,9 +1,3 @@
-/workdir/
-/tmp/
 .env*
-/lambda/target/
-/pulumi/pulumi.out/
-/pulumi/Pulumi.*.yaml
-!/pulumi/Pulumi.sample.yaml
 /.claude
 CLAUDE.local.md

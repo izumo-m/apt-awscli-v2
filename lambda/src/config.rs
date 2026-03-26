@@ -1,5 +1,8 @@
 use anyhow::{Context, Result};
 
+/// Working directory for temporary files (Lambda only allows /tmp)
+const WORKDIR: &str = "/tmp";
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum Package {
     AwsCli,
@@ -40,8 +43,6 @@ pub struct Config {
     pub archs: Vec<String>,
     /// Packages to manage (default: [AwsCli])
     pub packages: Vec<Package>,
-    /// Working directory (default: /tmp)
-    pub workdir: String,
     /// S3 sync concurrency (default: 8)
     pub threads: usize,
     /// zstd compression threads (default: 4)
@@ -78,9 +79,6 @@ impl Config {
             .collect::<Result<Vec<_>>>()
             .context("APT_AWSCLI_V2_PACKAGES contains an unknown package")?;
 
-        let workdir = opt_env("APT_AWSCLI_V2_WORKDIR")
-            .unwrap_or_else(|| "/tmp".to_string());
-
         let threads = opt_env("APT_AWSCLI_V2_THREADS")
             .and_then(|s| s.parse::<usize>().ok())
             .unwrap_or(8);
@@ -102,7 +100,6 @@ impl Config {
             max_versions,
             archs,
             packages,
-            workdir,
             threads,
             zstd_threads,
             zstd_level,
@@ -120,12 +117,12 @@ impl Config {
 
     /// Path to the local repo directory
     pub fn repo_dir(&self) -> String {
-        format!("{}/repo", self.workdir)
+        format!("{}/repo", WORKDIR)
     }
 
     /// Path to the pool directory for a specific package
     pub fn pool_dir(&self, pkg_prefix: &str) -> String {
-        format!("{}/repo/pool/main/{}", self.workdir, pkg_prefix)
+        format!("{}/repo/pool/main/{}", WORKDIR, pkg_prefix)
     }
 
     /// Relative path (from repo root) to the pool directory for a specific package.
@@ -136,7 +133,7 @@ impl Config {
 
     /// Path to the dists directory for a specific codename
     pub fn dists_dir(&self, codename: &str) -> String {
-        format!("{}/repo/dists/{}", self.workdir, codename)
+        format!("{}/repo/dists/{}", WORKDIR, codename)
     }
 
     /// Path to the binary-{arch} directory within dists
@@ -146,7 +143,7 @@ impl Config {
 
     /// Path to the dist (staging) directory
     pub fn dist_dir(&self) -> String {
-        format!("{}/dist", self.workdir)
+        format!("{}/dist", WORKDIR)
     }
 
     /// S3 key for a given relative path within the repo
