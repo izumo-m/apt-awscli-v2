@@ -9,11 +9,11 @@ When a new version is released to the official AWS distribution, APT packages ar
 ### Setup (first time only)
 
 ```bash
-curl -fsSL https://apt.masanao.site/public.key \
+curl -fsSL https://apt-awscli-v2.masanao.site/public.key \
   | sudo gpg --dearmor -o /usr/share/keyrings/apt-awscli-v2.gpg
 
 echo "deb [signed-by=/usr/share/keyrings/apt-awscli-v2.gpg] \
-  https://apt.masanao.site stable main" \
+  https://apt-awscli-v2.masanao.site stable main" \
   | sudo tee /etc/apt/sources.list.d/apt-awscli-v2.list
 ```
 
