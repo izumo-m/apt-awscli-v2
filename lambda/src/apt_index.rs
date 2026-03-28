@@ -129,12 +129,16 @@ struct DebMetadata {
     control: String,
 }
 
+fn hex_encode(bytes: &[u8]) -> String {
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
 /// Compute MD5, SHA1, SHA256 hashes of a byte slice in parallel using threads.
 fn compute_hashes(data: &[u8]) -> (String, String, String) {
     std::thread::scope(|s| {
-        let h_md5 = s.spawn(|| format!("{:x}", md5::Md5::digest(data)));
-        let h_sha1 = s.spawn(|| format!("{:x}", Sha1::digest(data)));
-        let h_sha256 = s.spawn(|| format!("{:x}", Sha256::digest(data)));
+        let h_md5 = s.spawn(|| hex_encode(&md5::Md5::digest(data)));
+        let h_sha1 = s.spawn(|| hex_encode(&Sha1::digest(data)));
+        let h_sha256 = s.spawn(|| hex_encode(&Sha256::digest(data)));
         (
             h_md5.join().unwrap(),
             h_sha1.join().unwrap(),
