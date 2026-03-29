@@ -1,4 +1,4 @@
-# apt-awscli-v2
+# APT repository for AWS CLI v2 (Unofficial)
 
 APT repository for AWS CLI v2 and Session Manager Plugin.
 When a new version is released to the official AWS distribution, APT packages are automatically generated and published.
