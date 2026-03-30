@@ -57,13 +57,16 @@ export function createLambda(
     // ─── Lambda Function ──────────────────────────────────────────────────────
     // The archive must exist before Pulumi evaluates (built by checkAndBuild in up.ts/preview.ts).
     // sourceHash includes lambdaArch, so changing architecture also changes the archive path.
-    const archivePath = path.resolve(__dirname, `../pulumi.out/.cache/${sourceHash}.zip`);
+    // ignoreChanges on "code" prevents diffs from zip metadata (timestamps);
+    // sourceCodeHash drives update detection based on the source hash alone.
+    const archivePath = path.join("..", "pulumi.out", ".cache", `${sourceHash}.zip`);
 
     const lambdaFn = new aws.lambda.Function(lambdaName, {
         name: lambdaName,
         runtime: "provided.al2023",
         architectures: [cfg.lambdaArch],
         code: new pulumi.asset.FileArchive(archivePath),
+        sourceCodeHash: sourceHash,
         handler: "bootstrap",
         role: lambdaRole.arn,
         memorySize: cfg.lambdaMemorySize,
@@ -72,6 +75,7 @@ export function createLambda(
         environment: { variables: lambdaEnvVars },
     }, {
         dependsOn: [lambdaRole, lambdaRolePolicy, logGroup],
+        ignoreChanges: ["code"],
     });
 
     return { lambdaFn, logGroup };
