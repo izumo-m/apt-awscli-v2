@@ -1,7 +1,7 @@
 # apt-awscli-v2 Lambda (Rust)
 
-Implementation for automatically building and deploying new versions of AWS CLI v2 and the Session Manager Plugin using AWS Lambda (Rust).
-By scheduling execution via EventBridge, new versions can be detected and deployed on a regular basis.
+Rust-based AWS Lambda that automatically builds and deploys new versions of AWS CLI v2 and the Session Manager Plugin.
+Scheduled via EventBridge to detect and deploy new versions on a regular basis.
 
 ## Processing Flow
 
@@ -50,7 +50,9 @@ s3://apt-awscli-v2-dev/apt/
 | File | Description |
 |----------|------|
 | `src/main.rs` | Lambda handler + orchestration |
+| `src/lib.rs` | Library root (module re-exports) |
 | `src/config.rs` | Configuration loading from environment variables, `Package` enum |
+| `src/logging.rs` | Lambda log formatter (tracing-subscriber) |
 | `src/s3_sync.rs` | S3 ↔ local sync |
 | `src/version.rs` | Latest version fetching (AWS CLI v2 / Session Manager Plugin) |
 | `src/builder.rs` | AWS CLI v2 deb build (creates package from official zip) |
@@ -62,19 +64,19 @@ s3://apt-awscli-v2-dev/apt/
 
 ## Metadata Templates (`metadata/`)
 
-Files under `metadata/` are embedded directly into the Lambda binary at compile time via `include_str!`.
-When modified, the source hash changes, triggering an automatic rebuild and redeploy when `npm run up` is run.
+Files under `metadata/` are embedded into the Lambda binary at compile time via `include_str!`.
+Modifying them changes the source hash, triggering an automatic rebuild and redeploy on `npm run up`.
 
 | File | Embedded in | Description |
 |----------|-----------|------|
 | `metadata/DEBIAN/control` | `src/builder.rs` | deb package control file template. Replaces `${VERSION}`, `${ARCH}`, etc. at runtime |
-| `metadata/DEBIAN/postinst` | `src/builder.rs` | Post-install script for deb (displays a PATH priority warning if the zip-based `/usr/local/bin/aws` exists) |
+| `metadata/DEBIAN/postinst` | `src/builder.rs` | Post-install script (warns about PATH priority if the zip-based `/usr/local/bin/aws` exists) |
 | `metadata/Release` | `src/apt_index.rs` | APT `Release` / `InRelease` file template |
 
 ## index.html Generation
 
-The top-level `README.md` is converted to HTML at compile time via `build.rs` using [pulldown-cmark](https://github.com/pulldown/pulldown-cmark),
-and deployed to S3 as `index.html`. This allows the repository root URL to display the README content in a browser.
+The top-level `README.md` is converted to HTML at compile time in `build.rs` using [pulldown-cmark](https://github.com/pulldown/pulldown-cmark)
+and deployed to S3 as `index.html`, so the repository root URL displays the README content in a browser.
 
 The generated file is also copied to `target/index.html` for local preview:
 
@@ -92,7 +94,7 @@ No Rust or cross-compiler installation is required on the host (builds run insid
 
 ## Tests (UT)
 
-Unit tests are available in `config.rs`, `version.rs`, `deploy.rs`, `apt_index.rs`, and `smp_builder.rs`.
+Unit tests are in `config.rs`, `version.rs`, `deploy.rs`, `apt_index.rs`, and `smp_builder.rs`.
 
 ```bash
 # Run all tests
@@ -106,15 +108,15 @@ cargo test --lib apt_index
 cargo test --lib smp_builder
 ```
 
-No Docker or cross-compilation environment is required; tests run with the host Rust toolchain.
+No Docker or cross-compilation environment required; tests run with the host Rust toolchain.
 
 ## Build
 
 ### Docker Build (Default)
 
-Performs cross-compilation with musl static linking inside a Docker container based on
+Cross-compiles with musl static linking inside a Docker container based on
 [`rust-musl-cross`](https://github.com/rust-cross/rust-musl-cross).
-The resulting binary is fully statically linked (no glibc dependency), ensuring compatibility with the Lambda execution environment.
+The resulting binary is fully statically linked (no glibc dependency), ensuring Lambda runtime compatibility.
 
 ```bash
 # arm64 build (default)
@@ -124,13 +126,13 @@ cargo make build
 APT_AWSCLI_V2_LAMBDA_ARCH=x86_64 cargo make build
 ```
 
-The first run takes time to build the Docker image, but subsequent runs use the cache.
+The first run takes time to build the Docker image; subsequent runs use the cache.
 The cargo registry is cached under `target/cargo-registry/`.
 `cargo make clean` removes all caches and build artifacts.
 
 ### Local Build (Without Docker)
 
-Available when the host has the Rust toolchain and the target musl target installed.
+Available when the host has the Rust toolchain and the musl target installed.
 
 ```bash
 cargo make build-local
@@ -139,8 +141,8 @@ APT_AWSCLI_V2_LAMBDA_ARCH=x86_64 cargo make build-local
 
 ### Artifacts
 
-Because `CARGO_TARGET_DIR` is separated per architecture, building both arm64 and x86_64
-will not overwrite intermediate artifacts.
+`CARGO_TARGET_DIR` is separated per architecture, so building both arm64 and x86_64
+does not overwrite intermediate artifacts.
 
 | Task | `CARGO_TARGET_DIR` | Final Artifact |
 |--------|---------------------|------------|
@@ -148,9 +150,9 @@ will not overwrite intermediate artifacts.
 | `APT_AWSCLI_V2_LAMBDA_ARCH=x86_64 cargo make build` | `target/x86_64/` | `target/x86_64/dist/` |
 | `cargo make build-local` | `target/local/` | `target/local/dist/` |
 
-Because `.cargo/config.toml` sets the default `target-dir` to `target/local`,
-local commands such as `cargo test` and `cargo build` also output under `target/local/`.
-Docker builds override this with the `CARGO_TARGET_DIR` environment variable, keeping architectures separated.
+`.cargo/config.toml` sets the default `target-dir` to `target/local`,
+so local commands (`cargo test`, `cargo build`) output under `target/local/`.
+Docker builds override this via the `CARGO_TARGET_DIR` environment variable, keeping architectures separated.
 
 Each directory contains the following files:
 
@@ -161,7 +163,7 @@ Each directory contains the following files:
 
 ## Updating Dependencies
 
-Steps for updating the dependency crates listed in `Cargo.toml` to their latest versions.
+Steps for updating dependency crates in `Cargo.toml` to their latest versions.
 
 ### 1. Check for updatable crates
 
@@ -177,7 +179,7 @@ If [cargo-outdated](https://github.com/kbknapp/cargo-outdated) is not installed,
 cargo update
 ```
 
-Updates `Cargo.lock` within the version ranges specified in `Cargo.toml` (e.g., `"1"` → latest `1.x.y`).
+Updates `Cargo.lock` within the version ranges in `Cargo.toml` (e.g., `"1"` → latest `1.x.y`).
 
 To bump a major version, edit `Cargo.toml` manually.
 
@@ -194,7 +196,7 @@ cargo make build
 ### 4. Deploy
 
 After tests pass, deploy from `pulumi/`.
-The change to `Cargo.lock` causes the source hash to change, so `npm run up` will automatically trigger a rebuild and redeploy.
+The `Cargo.lock` change alters the source hash, so `npm run up` automatically triggers a rebuild and redeploy.
 
 ```bash
 cd ../pulumi
@@ -203,8 +205,8 @@ npm run up
 
 ## Local Execution
 
-You can run the Lambda locally using the `cargo lambda` emulator.
-AWS credentials are required since it accesses a real S3 bucket and SSM parameters.
+Run the Lambda locally using the `cargo lambda` emulator.
+AWS credentials are required as it accesses a real S3 bucket and SSM parameters.
 
 ```bash
 # 1. Start the Lambda emulator
@@ -218,8 +220,8 @@ cargo lambda invoke --data-ascii '{}'
 
 For initial setup, refer to [pulumi/README.md](../pulumi/README.md).
 
-Deployment is performed via npm scripts in the `pulumi/` directory.
-Changes to source files are automatically detected by hash, triggering a Docker build and Lambda code update.
+Deployment is performed via npm scripts in `pulumi/`.
+Source file changes are automatically detected by hash, triggering a Docker build and Lambda code update.
 
 ### Code Update
 
@@ -243,7 +245,7 @@ npm run invoke '{}'
 ### Deploy Only (deploy_only)
 
 Skips deb package building and runs only index regeneration, signing, and S3 sync.
-Use this after updating the signing key or when InRelease needs to be regenerated.
+Useful after updating the signing key or when InRelease needs to be regenerated.
 
 ```bash
 cd ../pulumi
