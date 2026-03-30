@@ -92,7 +92,7 @@ curl -fsSL https://get.pulumi.com | sh
 
 ```bash
 cd pulumi  # this directory
-npm install
+npm ci
 ```
 
 Add the following to `pulumi/.env` and load it with `direnv` or similar (`.env` is already in gitignore):
@@ -169,7 +169,7 @@ There is no need to manually copy `Pulumi.{stack}.yaml`.
 
 ```bash
 cd pulumi
-npm install
+npm ci
 
 # Set environment variables in .env (use the same values as the existing stack)
 cat > .env <<'EOF'
