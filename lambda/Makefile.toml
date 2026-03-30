@@ -35,6 +35,7 @@ zip -jq "$LAMBDA_DIR/bootstrap.zip" "$LAMBDA_DIR/bootstrap"
 if [ -n "${APT_AWSCLI_V2_OUTPUT_ZIP:-}" ]; then
   mkdir -p "$(dirname "$APT_AWSCLI_V2_OUTPUT_ZIP")"
   cp "$LAMBDA_DIR/bootstrap.zip" "$APT_AWSCLI_V2_OUTPUT_ZIP"
+  echo "build: created $APT_AWSCLI_V2_OUTPUT_ZIP"
 fi
 '''
 
@@ -49,7 +50,22 @@ zip -jq "$LAMBDA_DIR/bootstrap.zip" "$LAMBDA_DIR/bootstrap"
 if [ -n "${APT_AWSCLI_V2_OUTPUT_ZIP:-}" ]; then
   mkdir -p "$(dirname "$APT_AWSCLI_V2_OUTPUT_ZIP")"
   cp "$LAMBDA_DIR/bootstrap.zip" "$APT_AWSCLI_V2_OUTPUT_ZIP"
+  echo "build: created $APT_AWSCLI_V2_OUTPUT_ZIP"
 fi
+'''
+
+[tasks.clean-package]
+description = "Clean only the lambda crate (keep dependencies cached)"
+dependencies = ["docker-image"]
+script = '''
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -v "$(pwd)/..:/repo" -w /repo/lambda \
+  -v "$(pwd)/target/cargo-registry:/cargo-registry" \
+  -e "CARGO_HOME=/cargo-registry" \
+  -e "CARGO_TARGET_DIR=target/$LAMBDA_ARCH" \
+  "$DOCKER_IMAGE-$LAMBDA_ARCH" \
+  cargo clean -p apt-awscli-v2-lambda --target $MUSL_TARGET --release
 '''
 
 [tasks.clean]
