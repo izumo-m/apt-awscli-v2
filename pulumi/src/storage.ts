@@ -9,7 +9,7 @@ import { AppConfig } from "./config";
 //   "s3://bucket/apt"   -> { bucket: "bucket", prefix: "apt/" }
 //   "s3://bucket/"      -> { bucket: "bucket", prefix: "" }
 //   "s3://bucket"       -> { bucket: "bucket", prefix: "" }
-function parseS3Uri(uri: string): { bucket: string; prefix: string } {
+export function parseS3Uri(uri: string): { bucket: string; prefix: string } {
     const normalized = uri.endsWith("/") ? uri : uri + "/";
     const match = normalized.match(/^s3:\/\/([^/]+)\/(.*)$/);
     if (!match) throw new Error(`Invalid S3 URI: "${uri}"`);

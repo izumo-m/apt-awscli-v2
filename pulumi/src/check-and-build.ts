@@ -41,8 +41,8 @@ export function checkAndBuild(sourceHash: string, lambdaArch: string): void {
     fs.mkdirSync(path.dirname(outputZip), { recursive: true });
     if (fs.existsSync(outputZip)) fs.unlinkSync(outputZip);
 
-    // Clean only the lambda crate to force build.rs to re-run.
-    // Dependencies are kept so only the lambda crate is recompiled.
+    // Clean only the lambda crate so it is recompiled.
+    // Dependencies are kept cached.
     spawnSync("cargo", ["make", "clean-package"], {
         env: { ...process.env, APT_AWSCLI_V2_LAMBDA_ARCH: lambdaArch },
         stdio: "inherit",
