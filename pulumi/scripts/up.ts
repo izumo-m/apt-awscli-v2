@@ -16,6 +16,7 @@ import {
     saveStackConfigToTag, handleError,
 } from "./preflight";
 import { checkAndBuild } from "../src/check-and-build";
+import { generateIndexHtml } from "../src/indexHtml";
 
 function main(): void {
     const stackName = getCurrentStackName();
@@ -27,6 +28,9 @@ function main(): void {
     // Build if needed — the archive must exist before Pulumi evaluates the FileArchive.
     const currentHash = createLambdaAsset(LAMBDA_DIR, lambdaArch).hash;
     checkAndBuild(currentHash, lambdaArch);
+
+    // Generate index.html from README.md (must exist before Pulumi evaluates BucketObjectv2).
+    generateIndexHtml();
 
     const result = spawnSync(
         "pulumi", ["up", "--stack", stackName, ...process.argv.slice(2)],

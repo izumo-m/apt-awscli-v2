@@ -17,6 +17,7 @@ import {
     extractDeployedHash,
 } from "./preflight";
 import { checkAndBuild } from "../src/check-and-build";
+import { generateIndexHtml } from "../src/indexHtml";
 
 async function main(): Promise<void> {
     const stackName = getCurrentStackName();
@@ -28,6 +29,9 @@ async function main(): Promise<void> {
     // Build if needed — the archive must exist before Pulumi evaluates the FileArchive.
     const currentHash = createLambdaAsset(LAMBDA_DIR, lambdaArch).hash;
     checkAndBuild(currentHash, lambdaArch);
+
+    // Generate index.html from README.md (must exist before Pulumi evaluates BucketObjectv2).
+    generateIndexHtml();
 
     if (process.argv.includes("--diff")) {
         try {
