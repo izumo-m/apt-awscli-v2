@@ -21,7 +21,8 @@ async fn main() -> Result<(), Error> {
 async fn handler(
     event: LambdaEvent<serde_json::Value>,
 ) -> Result<serde_json::Value, Error> {
-    let short_id = &event.context.request_id[..8];
+    let id = &event.context.request_id;
+    let short_id = &id[..id.len().min(8)];
     let span = tracing::info_span!("", req = short_id);
     handler_inner(event).instrument(span).await
 }

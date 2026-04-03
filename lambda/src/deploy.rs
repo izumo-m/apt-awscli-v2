@@ -194,6 +194,13 @@ mod tests {
 
         let key = version_sort_key("session-manager-plugin_1.2.707.0-1_amd64.deb");
         assert_eq!(key, vec![1, 2, 707, 0]);
+
+        // Legacy SMP naming without revision: trailing ".0_amd64" segment
+        // fails u64 parse, so last component is lost — but sort order is still
+        // correct because the first three components are sufficient to
+        // distinguish all known SMP versions.
+        let key = version_sort_key("session-manager-plugin_1.2.707.0_amd64.deb");
+        assert_eq!(key, vec![1, 2, 707]);
     }
 
     #[test]

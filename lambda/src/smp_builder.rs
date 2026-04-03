@@ -8,7 +8,8 @@ use crate::config::Config;
 /// Download a Session Manager Plugin .deb for the given version and architecture.
 /// Returns true if the file was downloaded (new), false if it already existed.
 pub async fn build(config: &Config, version: &str, arch: &str) -> Result<bool> {
-    let deb_name = format!("session-manager-plugin_{version}_{arch}.deb");
+    let pkg_version = format!("{version}-1");
+    let deb_name = format!("session-manager-plugin_{pkg_version}_{arch}.deb");
     let pool_dir = config.pool_dir("session-manager-plugin");
     let deb_path = format!("{pool_dir}/{deb_name}");
 
