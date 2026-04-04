@@ -5,6 +5,11 @@ use regex::Regex;
 /// Fetch the latest AWS CLI v2 version from GitHub tags.
 /// Only returns versions that are at least 1 day old.
 /// Returns the version string and the release datetime.
+///
+/// We scrape the GitHub tags HTML page instead of using the GitHub API because
+/// the HTML contains both the tag name and the release datetime in a single page,
+/// whereas the API would require multiple requests (tags + commits) to get the same
+/// information.
 pub async fn fetch_latest_version() -> Result<(String, DateTime<Utc>)> {
     let threshold = Utc::now() - Duration::hours(24);
 
@@ -28,6 +33,8 @@ fn parse_latest_version(html: &str, threshold: DateTime<Utc>) -> Result<(String,
 /// Fetch the latest Session Manager Plugin version from GitHub tags.
 /// Only returns versions that are at least 1 day old.
 /// Returns the version string and the release datetime.
+///
+/// See [`fetch_latest_version`] for why we scrape HTML instead of using the API.
 pub async fn fetch_session_manager_plugin_version() -> Result<(String, DateTime<Utc>)> {
     let threshold = Utc::now() - Duration::hours(24);
 

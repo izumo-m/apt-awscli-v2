@@ -8,13 +8,15 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import { marked } from "marked";
 
 const README_PATH    = path.resolve(__dirname, "..", "..", "README.md");
 const INDEX_HTML_DIR = path.resolve(__dirname, "..", "pulumi.out");
 
 /** Convert README.md to a styled HTML page and write to pulumi.out/index.html. */
 export function generateIndexHtml(): void {
+    // marked v17+ is ESM-only; Node.js 22+ supports require() for ESM modules
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { marked } = require("marked") as { marked: { parse(src: string, options?: { async: false }): string } };
     const markdown = fs.readFileSync(README_PATH, "utf8");
     const bodyHtml = marked.parse(markdown, { async: false }) as string;
 
