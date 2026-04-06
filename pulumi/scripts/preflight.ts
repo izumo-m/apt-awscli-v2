@@ -182,20 +182,25 @@ export function showSourceDiff(deployedHash: string, lambdaArch: string): void {
 
 /**
  * Extract the deployed source hash from the Automation API exportStack() result.
- * Reads the Lambda Function's code.path (FileArchive) which contains the hash in the filename.
- * Falls back to the legacy Command-based format for backward compatibility during migration.
+ * Reads the Lambda Function's sourceCodeHash, which is always kept up-to-date
+ * (unlike code.path which is frozen by ignoreChanges: ["code"]).
+ * Falls back to code.path, then to the legacy Command-based format.
  */
 export function extractDeployedHash(deployment: Deployment): string {
     type Resource = {
         type?: string;
         inputs?: {
+            sourceCodeHash?: string;
             code?: { path?: string };
             environment?: { BUILD_OUTPUT_HASH?: string; BUILD_OUTPUT_ZIP?: string; BUILD_EXPECTED_HASH?: string };
         };
     };
     for (const r of (deployment.deployment?.resources ?? []) as Resource[]) {
-        // Current: extract hash from Lambda code FileArchive path (.cache/{hash}.zip)
         if (r.type === "aws:lambda/function:Function") {
+            // Preferred: sourceCodeHash is always updated (not subject to ignoreChanges)
+            const hash = r.inputs?.sourceCodeHash;
+            if (typeof hash === "string" && /^[0-9a-f]{64}$/.test(hash)) return hash;
+            // Fallback: extract from code.path (may be stale due to ignoreChanges: ["code"])
             const codePath = r.inputs?.code?.path;
             if (codePath) {
                 const match = codePath.match(/([0-9a-f]{64})\.zip$/);
