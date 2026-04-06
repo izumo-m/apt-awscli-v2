@@ -16,15 +16,15 @@
     "generate-index-html": "ts-node scripts/generate-index-html.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-cloudwatch-logs": "^3.1024.0",
-    "@aws-sdk/client-lambda": "^3.1024.0",
-    "@aws-sdk/client-s3": "^3.1024.0",
-    "@aws-sdk/client-sns": "^3.1024.0",
-    "@aws-sdk/client-ssm": "^3.1024.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.1025.0",
+    "@aws-sdk/client-lambda": "^3.1025.0",
+    "@aws-sdk/client-s3": "^3.1025.0",
+    "@aws-sdk/client-sns": "^3.1025.0",
+    "@aws-sdk/client-ssm": "^3.1025.0",
     "@pulumi/aws": "^7.24.0",
     "@pulumi/pulumi": "^3.229.0",
     "js-yaml": "^4.1.1",
-    "marked": "^17.0.5",
+    "marked": "^17.0.6",
     "openpgp": "^6.3.0"
   },
   "devDependencies": {
