@@ -11,9 +11,9 @@
 import { spawnSync } from "child_process";
 import {
     PULUMI_DIR, LAMBDA_DIR,
-    getLambdaArch, createLambdaAsset, createCurrentSnapshot,
+    getLambdaArch, createLambdaAsset, handleError,
     getPulumiEnv, getCurrentStackName, ensureStackConfig,
-    saveStackConfigToTag, handleError,
+    createCurrentSnapshot, saveStackConfigToTag,
 } from "./preflight";
 import { checkAndBuild } from "../src/check-and-build";
 import { generateIndexHtml } from "../src/indexHtml";

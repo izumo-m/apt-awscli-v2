@@ -9,22 +9,21 @@
  */
 
 import { spawnSync } from "child_process";
-import { LocalWorkspace } from "@pulumi/pulumi/automation";
 import {
     PULUMI_DIR, LAMBDA_DIR,
-    getLambdaArch, createLambdaAsset, showSourceDiff, handleError,
+    getLambdaArch, createLambdaAsset, handleError,
     getPulumiEnv, getCurrentStackName, ensureStackConfig,
-    extractDeployedHash,
+    showSourceDiff, extractDeployedHash,
 } from "./preflight";
 import { checkAndBuild } from "../src/check-and-build";
 import { generateIndexHtml } from "../src/indexHtml";
 
-async function main(): Promise<void> {
+function main(): void {
     const stackName = getCurrentStackName();
     ensureStackConfig(stackName);
 
-    const pulumiEnv  = getPulumiEnv();
     const lambdaArch = getLambdaArch();
+    const pulumiEnv  = getPulumiEnv();
 
     // Build if needed — the archive must exist before Pulumi evaluates the FileArchive.
     const currentHash = createLambdaAsset(LAMBDA_DIR, lambdaArch).hash;
@@ -35,15 +34,16 @@ async function main(): Promise<void> {
 
     if (process.argv.includes("--diff")) {
         try {
-            const stack = await LocalWorkspace.selectStack(
-                { workDir: PULUMI_DIR, stackName },
-                pulumiEnv["PULUMI_BACKEND_URL"]
-                    ? { envVars: { PULUMI_BACKEND_URL: pulumiEnv["PULUMI_BACKEND_URL"] } }
-                    : undefined,
+            const exported = spawnSync(
+                "pulumi", ["stack", "export", "--stack", stackName],
+                { cwd: PULUMI_DIR, env: pulumiEnv, stdio: ["inherit", "pipe", "inherit"] },
             );
-            const deployment = await stack.exportStack();
-            const deployedHash = extractDeployedHash(deployment);
-            if (deployedHash) showSourceDiff(deployedHash, lambdaArch);
+            if (exported.error) throw exported.error;
+            if (exported.status === 0) {
+                const deployment = JSON.parse(exported.stdout.toString());
+                const deployedHash = extractDeployedHash(deployment);
+                if (deployedHash) showSourceDiff(deployedHash, lambdaArch);
+            }
         } catch (e) {
             console.error(`Warning: could not retrieve deployed state: ${(e as Error).message}`);
         }
@@ -54,7 +54,9 @@ async function main(): Promise<void> {
         { cwd: PULUMI_DIR, env: pulumiEnv, stdio: "inherit" },
     );
 
+    if (result.error) throw result.error;
+
     process.exit(result.status ?? 0);
 }
 
-main().catch(handleError);
+try { main(); } catch (e) { handleError(e); }
