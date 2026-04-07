@@ -142,7 +142,6 @@ Define the required configuration in `Pulumi.dev.yaml`. This single file contain
 
 ```yaml
 config:
-  aptAwscliV2:resourcePrefix: your-prefix
   aptAwscliV2:email: user@example.com
   aptAwscliV2:maintainerName: Your Name
   aptAwscliV2:s3Uri: s3://your-apt-bucket/apt/
@@ -457,7 +456,7 @@ npm run generate-index-html
 
 | Key | Required | Default | Description |
 |------|:----:|-----------|------|
-| `aptAwscliV2:resourcePrefix` | ✅ | — | Common prefix for all resource names |
+| `aptAwscliV2:resourcePrefix` | | `apt-awscli-v2` | Common prefix for all resource names |
 | `aptAwscliV2:email` | ✅ | — | Maintainer email address |
 | `aptAwscliV2:maintainerName` | ✅ | — | Maintainer name |
 | `aptAwscliV2:s3Uri` | ✅ | — | S3 URI for the APT repository (e.g., `s3://my-bucket/apt/`) |

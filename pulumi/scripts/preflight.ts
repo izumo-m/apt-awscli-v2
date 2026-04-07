@@ -332,8 +332,7 @@ export function getConfig(key: string, defaultValue?: string): string | undefine
 
 /** Return the Lambda function name from Pulumi config (`{resourcePrefix}-lambda`). */
 export function getLambdaName(): string {
-    const prefix = getConfig("aptAwscliV2:resourcePrefix");
-    if (!prefix) throw new Error("aptAwscliV2:resourcePrefix is not configured");
+    const prefix = getConfig("aptAwscliV2:resourcePrefix") || "apt-awscli-v2";
     return `${prefix}-lambda`;
 }
 
