@@ -1,7 +1,7 @@
 # APT repository for AWS CLI v2 (Unofficial)
 
 APT repository for AWS CLI v2 and Session Manager Plugin.
-When a new version is released to the official AWS distribution, APT packages are automatically generated and published (typically within 1 day).
+When a new version is released to the official AWS distribution, APT packages are automatically generated and published.
 
 **Supported architectures:** amd64, arm64
 
