@@ -1,5 +1,5 @@
 /**
- * Script to deploy only IAM resources (TypeScript version of up-iam.sh).
+ * Script to deploy only IAM resources.
  * Run by an administrator with IAM permissions (for initial deployment or IAM changes).
  * Docker / cargo environment is not required. bootstrap.zip is also not needed.
  *
@@ -9,17 +9,18 @@
  *
  * Usage:
  *   npm run up:iam [-- <pulumi up options (e.g. --yes)>]
+ *
+ * Prerequisites:
+ *   pulumi login <backendUrl>   (or export PULUMI_BACKEND_URL=<backendUrl>)
+ *   pulumi stack select <name>
  */
 
 import { spawnSync } from "child_process";
 import * as fs from "fs";
 import * as path from "path";
-import { PULUMI_DIR, getCurrentStackName, getPulumiEnv, ensureStackConfig } from "./preflight";
+import { PULUMI_DIR, getCurrentStackName } from "./preflight";
 
 const stackName = getCurrentStackName();
-ensureStackConfig(stackName);
-
-const pulumiEnv = getPulumiEnv();
 
 // Get project name from Pulumi.yaml
 const pulumiYaml = fs.readFileSync(path.join(PULUMI_DIR, "Pulumi.yaml"), "utf8");
@@ -33,8 +34,8 @@ const project = projectMatch[1].trim();
 const target = `urn:pulumi:${stackName}::${project}::aws:iam*::*`;
 
 const result = spawnSync(
-    "pulumi", ["up", "--stack", stackName, `--target=${target}`, ...process.argv.slice(2)],
-    { cwd: PULUMI_DIR, env: pulumiEnv, stdio: "inherit" },
+    "pulumi", ["up", `--target=${target}`, ...process.argv.slice(2)],
+    { cwd: PULUMI_DIR, stdio: "inherit" },
 );
 
 if (result.error) throw result.error;

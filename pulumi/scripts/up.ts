@@ -1,47 +1,34 @@
 /**
  * Wrapper for pulumi up.
- * Builds the Lambda archive if needed, then runs pulumi up.
  * After a successful up, saves the current source snapshot (for the next preview --diff).
  * After a successful up, saves Pulumi.{stack}.yaml as a stack tag in Pulumi state.
  *
  * Usage:
  *   npm run up [-- <pulumi up options>]
+ *
+ * Prerequisites:
+ *   pulumi login <backendUrl>   (or export PULUMI_BACKEND_URL=<backendUrl>)
+ *   pulumi stack select <name>
  */
 
 import { spawnSync } from "child_process";
 import {
-    PULUMI_DIR, LAMBDA_DIR,
-    getLambdaArch, createLambdaAsset, handleError,
-    getPulumiEnv, getCurrentStackName, ensureStackConfig,
+    PULUMI_DIR,
+    getLambdaArch, getCurrentStackName, handleError,
     createCurrentSnapshot, saveStackConfigToTag,
 } from "./preflight";
-import { checkAndBuild } from "../src/check-and-build";
-import { generateIndexHtml } from "../src/indexHtml";
 
 function main(): void {
-    const stackName = getCurrentStackName();
-    ensureStackConfig(stackName);
-
-    const lambdaArch = getLambdaArch();
-    const pulumiEnv  = getPulumiEnv();
-
-    // Build if needed — the archive must exist before Pulumi evaluates the FileArchive.
-    const currentHash = createLambdaAsset(LAMBDA_DIR, lambdaArch).hash;
-    checkAndBuild(currentHash, lambdaArch);
-
-    // Generate index.html from README.md (must exist before Pulumi evaluates BucketObjectv2).
-    generateIndexHtml();
-
     const result = spawnSync(
-        "pulumi", ["up", "--stack", stackName, ...process.argv.slice(2)],
-        { cwd: PULUMI_DIR, env: pulumiEnv, stdio: "inherit" },
+        "pulumi", ["up", ...process.argv.slice(2)],
+        { cwd: PULUMI_DIR, stdio: "inherit" },
     );
 
     if (result.error) throw result.error;
 
     if (result.status === 0) {
-        createCurrentSnapshot(lambdaArch);
-        saveStackConfigToTag(stackName, pulumiEnv);
+        createCurrentSnapshot(getLambdaArch());
+        saveStackConfigToTag(getCurrentStackName());
     }
 
     process.exit(result.status ?? 0);

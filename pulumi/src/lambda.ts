@@ -3,6 +3,7 @@ import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
 import { AppConfig } from "./config";
 import { watchedFiles, computeSourceHash } from "./lambdaSource";
+import { checkAndBuild } from "./check-and-build";
 
 // ─── Lambda ───────────────────────────────────────────────────────────────────
 
@@ -30,15 +31,20 @@ export function createLambda(
     // ─── Build Lambda ─────────────────────────────────────────────────────────
     // Compute the source file hash at Pulumi program evaluation time.
     // The hash includes lambdaArch, so changing architecture also changes the hash.
-    // @pulumi/command only runs the build when the hash changes.
     //
     // Hash computation uses relative paths from lambdaDir as baseDir (via path.relative in computeSourceHash).
     // This ensures hash values are consistent across user environments.
     // lambdaDir itself is an absolute path based on __dirname, so it doesn't depend on the working directory.
+    //
+    // checkAndBuild() ensures the archive exists before Pulumi evaluates the FileArchive.
+    // It returns the final hash (which may differ if the build updated watched files like Cargo.lock).
     const lambdaDir = path.resolve(__dirname, "../../lambda");
 
     const watchedFileList = watchedFiles(lambdaDir);
-    const sourceHash      = computeSourceHash(watchedFileList, lambdaDir, [cfg.lambdaArch]);
+    const sourceHash      = checkAndBuild(
+        computeSourceHash(watchedFileList, lambdaDir, [cfg.lambdaArch]),
+        cfg.lambdaArch,
+    );
 
 
     const lambdaEnvVars: Record<string, string> = {
@@ -55,7 +61,6 @@ export function createLambda(
     };
 
     // ─── Lambda Function ──────────────────────────────────────────────────────
-    // The archive must exist before Pulumi evaluates (built by checkAndBuild in up.ts/preview.ts).
     // sourceHash includes lambdaArch, so changing architecture also changes the archive path.
     // ignoreChanges on "code" prevents diffs from zip metadata (timestamps);
     // sourceCodeHash drives update detection based on the source hash alone.

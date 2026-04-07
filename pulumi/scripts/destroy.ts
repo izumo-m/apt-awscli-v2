@@ -4,14 +4,15 @@
  *
  * Usage:
  *   npm run destroy [-- <pulumi destroy options>]
+ *
+ * Prerequisites:
+ *   pulumi login <backendUrl>   (or export PULUMI_BACKEND_URL=<backendUrl>)
+ *   pulumi stack select <name>
  */
 
 import { spawnSync } from "child_process";
 import * as readline from "readline";
-import {
-    PULUMI_DIR, getPulumiEnv, getCurrentStackName, getBackendS3,
-    ensureStackConfig, handleError,
-} from "./preflight";
+import { PULUMI_DIR, getBackendS3, handleError } from "./preflight";
 import { destroyBucket } from "./bootstrap";
 
 function confirm(question: string): Promise<boolean> {
@@ -25,14 +26,9 @@ function confirm(question: string): Promise<boolean> {
 }
 
 async function main(): Promise<void> {
-    const stackName = getCurrentStackName();
-    ensureStackConfig(stackName);
-
-    const pulumiEnv = getPulumiEnv();
-
     const result = spawnSync(
-        "pulumi", ["destroy", "--stack", stackName, ...process.argv.slice(2)],
-        { cwd: PULUMI_DIR, env: pulumiEnv, stdio: "inherit" },
+        "pulumi", ["destroy", ...process.argv.slice(2)],
+        { cwd: PULUMI_DIR, stdio: "inherit" },
     );
 
     if (result.error) throw result.error;

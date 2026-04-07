@@ -10,6 +10,7 @@
     "invoke": "ts-node scripts/invoke.ts",
     "logs": "ts-node scripts/logs.ts",
     "destroy": "ts-node scripts/destroy.ts",
+    "restore-config": "ts-node scripts/restore-config.ts",
     "stack:ls": "pulumi stack ls",
     "config": "pulumi config",
     "confirm-subscription": "ts-node scripts/confirm-subscription.ts",

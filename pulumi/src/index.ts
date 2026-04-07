@@ -25,7 +25,10 @@ new GpgKeyInit(`${cfg.resourcePrefix}-gpg-key-init`, {
 
 const { bucket, logsBucket }           = createStorage(cfg);
 
-// ─── index.html (generated from README.md by preview.ts / up.ts) ────────────
+// ─── index.html (generated from README.md) ─────────────────────────────────
+import { generateIndexHtml } from "./indexHtml";
+generateIndexHtml();
+
 const { prefix: s3Prefix } = parseS3Uri(cfg.s3Uri);
 const indexHtmlPath = path.resolve(__dirname, "..", "pulumi.out", "index.html");
 

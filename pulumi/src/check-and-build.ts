@@ -24,14 +24,15 @@ const PULUMI_OUT   = path.resolve(__dirname, "..", "pulumi.out");
  *
  * @param sourceHash    Current source hash
  * @param lambdaArch    Lambda architecture (arm64 / x86_64)
+ * @returns             The final source hash (may differ from sourceHash if the build updated watched files)
  */
-export function checkAndBuild(sourceHash: string, lambdaArch: string): void {
+export function checkAndBuild(sourceHash: string, lambdaArch: string): string {
     const outputZip = path.join(PULUMI_OUT, ".cache", `${sourceHash}.zip`);
 
     // Skip if archive already exists
     if (fs.existsSync(outputZip) && fs.statSync(outputZip).size > 0) {
         process.stdout.write("build: skip (archive already exists)\n");
-        return;
+        return sourceHash;
     }
 
     process.stdout.write(`build: running cargo make build (arch: ${lambdaArch})\n`);
@@ -60,7 +61,7 @@ export function checkAndBuild(sourceHash: string, lambdaArch: string): void {
     });
 
     if (result.error) throw result.error;
-    if (result.status !== 0) process.exit(result.status ?? 1);
+    if (result.status !== 0) throw new Error(`Lambda build failed (exit ${result.status})`);
 
     // Recompute hash after build — the build may have updated watched files
     // (e.g. Cargo.lock when Cargo.toml version changes).
@@ -69,5 +70,7 @@ export function checkAndBuild(sourceHash: string, lambdaArch: string): void {
         const newZip = path.join(PULUMI_OUT, ".cache", `${newHash}.zip`);
         fs.renameSync(outputZip, newZip);
         process.stdout.write(`build: source hash changed after build (${sourceHash.slice(0, 12)} -> ${newHash.slice(0, 12)}), archive renamed\n`);
+        return newHash;
     }
+    return sourceHash;
 }

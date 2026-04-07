@@ -236,68 +236,50 @@ export function getLambdaArch(): string {
 export interface BackendS3 {
     bucket: string;
     prefix: string;  // Prefix (with trailing slash, or "" if empty)
-    url:    string;  // Original value of APT_AWSCLI_V2_BACKEND
+    url:    string;  // Original value of PULUMI_BACKEND_URL
 }
 
 /**
- * Parse the APT_AWSCLI_V2_BACKEND environment variable and return a BackendS3.
- * Returns null if not set.
+ * Parse the PULUMI_BACKEND_URL environment variable and return a BackendS3.
+ * Returns null if not set or not an S3 backend.
  */
 export function getBackendS3(): BackendS3 | null {
-    const raw = process.env["APT_AWSCLI_V2_BACKEND"];
+    const raw = process.env["PULUMI_BACKEND_URL"];
     if (!raw) return null;
     const match = raw.match(/^s3:\/\/([^/]+)(\/.*)?$/);
-    if (!match) throw new Error(`Invalid APT_AWSCLI_V2_BACKEND: "${raw}" (expected s3://bucket[/prefix])`);
+    if (!match) return null;  // not an S3 backend (e.g. file://, https://)
     const bucket    = match[1];
     const prefixRaw = match[2] ?? "";
     const prefix    = prefixRaw ? prefixRaw.replace(/^\//, "").replace(/\/?$/, "/") : "";
     return { bucket, prefix, url: raw };
 }
 
-/**
- * Return environment variables for child processes.
- * Exits with an error if APT_AWSCLI_V2_BACKEND is not set.
- */
-export function getPulumiEnv(): NodeJS.ProcessEnv {
-    const backend = getBackendS3();
-    if (!backend) {
-        process.stderr.write("Error: APT_AWSCLI_V2_BACKEND is not set.\n");
-        process.stderr.write("  e.g.: export APT_AWSCLI_V2_BACKEND=s3://my-pulumi-state\n");
-        process.exit(1);
-    }
-    return { ...process.env, PULUMI_BACKEND_URL: backend.url };
-}
-
 // ─── Stack Name ─────────────────────────────────────────────────────────────
 
+let _cachedStackName: string | undefined;
+
 /**
- * Return the stack name from the APT_AWSCLI_V2_STACK environment variable.
- * Exits with an error if not set.
+ * Return the currently selected Pulumi stack name.
+ * Requires that the user has already run `pulumi stack select <name>`.
  */
 export function getCurrentStackName(): string {
-    const envStack = process.env["APT_AWSCLI_V2_STACK"];
-    if (!envStack) {
-        process.stderr.write("Error: APT_AWSCLI_V2_STACK is not set.\n");
-        process.stderr.write("  e.g.: export APT_AWSCLI_V2_STACK=dev\n");
+    if (_cachedStackName) return _cachedStackName;
+
+    const result = spawnSync("pulumi", ["stack", "--show-name"], {
+        cwd: PULUMI_DIR,
+        stdio: ["pipe", "pipe", "pipe"],
+        encoding: "utf8",
+    });
+
+    const name = result.stdout?.trim();
+    if (result.status !== 0 || !name) {
+        process.stderr.write("Error: no Pulumi stack selected.\n");
+        process.stderr.write("  Run: pulumi stack select <name>\n");
         process.exit(1);
     }
-    return envStack;
-}
 
-// ─── Stack Config File Verification ─────────────────────────────────────────
-
-/**
- * Verify that Pulumi.{stack}.yaml exists locally.
- * Exits with an error message if not found.
- * Run "npm run bootstrap" to restore.
- */
-export function ensureStackConfig(stackName: string): void {
-    const configFileName = `Pulumi.${stackName}.yaml`;
-    if (fs.existsSync(path.join(PULUMI_DIR, configFileName))) return;
-
-    process.stderr.write(`Error: ${configFileName} not found.\n`);
-    process.stderr.write(`Run "npm run bootstrap" to restore from Pulumi stack state.\n`);
-    process.exit(1);
+    _cachedStackName = name;
+    return name;
 }
 
 // ─── Save Config File to Stack Tags ─────────────────────────────────────────
@@ -306,7 +288,7 @@ export function ensureStackConfig(stackName: string): void {
  * Save the contents of Pulumi.{stack}.yaml to the Pulumi state stack tag (stack-config).
  * Called after a successful pulumi up. Failures only produce warnings (do not undo the up).
  */
-export function saveStackConfigToTag(stackName: string, pulumiEnv: NodeJS.ProcessEnv): void {
+export function saveStackConfigToTag(stackName: string): void {
     const configPath = path.join(PULUMI_DIR, `Pulumi.${stackName}.yaml`);
     if (!fs.existsSync(configPath)) {
         process.stderr.write(`Warning: Pulumi.${stackName}.yaml not found, skipping stack tag update.\n`);
@@ -315,8 +297,8 @@ export function saveStackConfigToTag(stackName: string, pulumiEnv: NodeJS.Proces
 
     const encoded = Buffer.from(fs.readFileSync(configPath, "utf8")).toString("base64");
     const result  = spawnSync(
-        "pulumi", ["stack", "tag", "set", "stack-config", encoded, "--stack", stackName],
-        { cwd: PULUMI_DIR, env: pulumiEnv, stdio: ["pipe", "pipe", "inherit"], encoding: "utf8" },
+        "pulumi", ["stack", "tag", "set", "stack-config", encoded],
+        { cwd: PULUMI_DIR, stdio: ["pipe", "pipe", "inherit"], encoding: "utf8" },
     );
 
     if (result.status !== 0) {
