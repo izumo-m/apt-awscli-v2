@@ -56,8 +56,10 @@ async function main(): Promise<void> {
     if (tagContent !== null) {
         if (localExists) {
             const ok = await confirm(
-                `${configFileName} exists locally and in Pulumi state.\n` +
-                `Overwrite local with Pulumi state version? (local changes will be lost) [y/N] `
+                `${configFileName} already exists locally.\n` +
+                `Replace it with the version stored in Pulumi stack state?\n` +
+                `  WARNING: Any local edits to ${configFileName} will be lost.\n` +
+                `Proceed? [y/N] `
             );
             if (!ok) {
                 console.log(`Keeping local ${configFileName}.`);
