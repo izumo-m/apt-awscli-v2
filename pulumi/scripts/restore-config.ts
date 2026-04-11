@@ -2,18 +2,17 @@
  * Restore Pulumi.{stack}.yaml from Pulumi state stack tags.
  *
  * Usage:
- *   npm run restore-config
+ *   npm run restore-config <stack>
  *
  * Prerequisites:
  *   pulumi login <backendUrl>
- *   pulumi stack select <name>
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
 import { spawnSync } from "child_process";
-import { handleError, getCurrentStackName, PULUMI_DIR } from "./preflight";
+import { handleError, PULUMI_DIR } from "./preflight";
 
 function confirm(question: string): Promise<boolean> {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -34,14 +33,19 @@ function confirm(question: string): Promise<boolean> {
  * - Tag absent + local absent → error (prompt to copy from sample)
  */
 async function main(): Promise<void> {
-    const stackName      = getCurrentStackName();
+    const stackName = process.argv[2];
+    if (!stackName) {
+        process.stderr.write("Usage: npm run restore-config <stack>\n");
+        process.exit(1);
+    }
+
     const configFileName = `Pulumi.${stackName}.yaml`;
     const localPath      = path.join(PULUMI_DIR, configFileName);
     const localExists    = fs.existsSync(localPath);
 
     // Read from Pulumi state stack tags
     const tagResult = spawnSync(
-        "pulumi", ["stack", "tag", "get", "stack-config"],
+        "pulumi", ["stack", "tag", "get", "stack-config", "--stack", stackName],
         { cwd: PULUMI_DIR, stdio: ["pipe", "pipe", "pipe"], encoding: "utf8" },
     );
 

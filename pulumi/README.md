@@ -159,7 +159,7 @@ pulumi login s3://your-apt-pulumi-state
 pulumi stack select dev
 
 # Restore Pulumi.dev.yaml from Pulumi state
-npm run restore-config
+npm run restore-config dev
 
 # Start operations
 pulumi preview
@@ -169,7 +169,7 @@ pulumi up
 ## Configuration File Synchronization
 
 When you edit `Pulumi.{stack}.yaml`, run `npm run up`; changes are automatically saved as Pulumi state stack tags on success.
-To pull the latest configuration on another machine, run `npm run restore-config` (you will be prompted to confirm overwriting).
+To pull the latest configuration on another machine, run `npm run restore-config <stack>` (you will be prompted to confirm overwriting).
 
 ## Deleting Resources
 
@@ -442,7 +442,7 @@ npm run generate-index-html
 | Script | Description |
 |--------|-------------|
 | `npm run bootstrap` | Create and configure the S3 backend bucket |
-| `npm run restore-config` | Restore `Pulumi.{stack}.yaml` from Pulumi state stack tags |
+| `npm run restore-config <stack>` | Restore `Pulumi.{stack}.yaml` from Pulumi state stack tags |
 | `npm run preview` | Run `pulumi preview` (pass `--diff` to also show Lambda source diff) |
 | `npm run up` | Run `pulumi up` with post-deploy snapshot and config backup |
 | `npm run up:iam` | Deploy only IAM resources (for restricted-permission environments) |

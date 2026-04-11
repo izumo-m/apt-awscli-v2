@@ -245,7 +245,7 @@ async function main(): Promise<void> {
 Bootstrap complete. Next steps:
   pulumi login ${backend.url}
   pulumi stack init <name>        (or: pulumi stack select <name>)
-  npm run restore-config          (restore Pulumi.<name>.yaml from state)
+  npm run restore-config <name>   (restore Pulumi.<name>.yaml from state)
 `);
 }
 
