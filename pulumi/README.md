@@ -116,8 +116,8 @@ Optionally, add the following to `pulumi/.env` and load with `direnv` or similar
 
 ```bash
 export PULUMI_BACKEND_URL=s3://your-apt-pulumi-state  # Can replace `pulumi login`
-export PULUMI_CONFIG_PASSPHRASE=                       # No secrets in state; passphrase not needed
-export PULUMI_PAGER=                                   # Disable pager
+export PULUMI_CONFIG_PASSPHRASE=                      # No secrets in state; passphrase not needed
+export PULUMI_PAGER=                                  # Disable pager
 ```
 
 ### Deploy
@@ -131,10 +131,9 @@ Running `pulumi up` automatically executes the following:
 1. Generates a GPG key and registers it in SSM Parameter Store (`SecureString`), if not already present
 2. Creates an S3 bucket and configures the public read policy
 3. Creates IAM roles and policies (for Lambda and the scheduler)
-4. Builds the Lambda function (via Docker) and deploys it
-5. Configures a schedule (default: Wed–Sun UTC 0:00) using EventBridge Scheduler
-
-You can also use the wrapper script `npm run up`, which additionally saves a source snapshot and backs up the config file to Pulumi state after a successful deploy.
+4. Builds the Lambda function (via Docker) and deploys it, capturing a source snapshot for later `preview --diff`
+5. Backs up `Pulumi.{stack}.yaml` to the state bucket as a managed `aws.s3.BucketObjectv2`
+6. Configures a schedule (default: Wed–Sun UTC 0:00) using EventBridge Scheduler
 
 ### Example Pulumi.dev.yaml Configuration
 
@@ -168,8 +167,16 @@ pulumi up
 
 ## Configuration File Synchronization
 
-When you edit `Pulumi.{stack}.yaml`, run `npm run up`; changes are automatically saved as Pulumi state stack tags on success.
-To pull the latest configuration on another machine, run `npm run restore-config <stack>` (you will be prompted to confirm overwriting).
+`Pulumi.{stack}.yaml` is backed up to the Pulumi state bucket as a managed asset
+(`aws.s3.BucketObjectv2` at `s3://<state-bucket>/stack-configs/Pulumi.{stack}.yaml`).
+Edits to the file appear as a normal diff in `pulumi preview` and are uploaded
+during `pulumi up` as part of the stack itself — no post-hook involved.
+
+To pull the latest configuration on another machine, run
+`npm run restore-config <stack>` (you will be prompted to confirm overwriting).
+If the state bucket has versioning enabled (see `--versioning` on
+`npm run bootstrap`), historical versions of the file can be inspected with
+`aws s3api list-object-versions` / `get-object --version-id`.
 
 ## Deleting Resources
 
@@ -200,7 +207,7 @@ npm run up:iam   # Deploy only aws:iam/* resources
 ### Developer (Normal operations)
 
 ```bash
-npm run up   # Deploys all resources (skips IAM if unchanged)
+pulumi up    # Deploys all resources (skips IAM if unchanged)
 ```
 
 If there are pending IAM changes, a permission error occurs at the start and execution stops without touching other resources. Ask the administrator to run `npm run up:iam`.
@@ -442,9 +449,8 @@ npm run generate-index-html
 | Script | Description |
 |--------|-------------|
 | `npm run bootstrap` | Create and configure the S3 backend bucket |
-| `npm run restore-config <stack>` | Restore `Pulumi.{stack}.yaml` from Pulumi state stack tags |
-| `npm run preview` | Run `pulumi preview` (pass `--diff` to also show Lambda source diff) |
-| `npm run up` | Run `pulumi up` with post-deploy snapshot and config backup |
+| `npm run restore-config <stack>` | Restore `Pulumi.{stack}.yaml` from the Pulumi state bucket |
+| `npm run diff` | Show a unified diff of Lambda sources vs. the deployed version |
 | `npm run up:iam` | Deploy only IAM resources (for restricted-permission environments) |
 | `npm run destroy` | Run `pulumi destroy` with optional state bucket cleanup |
 | `npm run invoke` | Invoke the Lambda function |

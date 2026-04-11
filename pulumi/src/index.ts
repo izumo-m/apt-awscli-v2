@@ -1,3 +1,4 @@
+import * as fs from "fs";
 import * as path from "path";
 import * as aws from "@pulumi/aws";
 import * as pulumi from "@pulumi/pulumi";
@@ -13,6 +14,28 @@ import { createScheduler }                              from "./scheduler";
 
 const cfg           = loadConfig();
 const currentRegion = aws.getRegionOutput().name;
+
+// ─── Stack Config Backup ─────────────────────────────────────────────────────
+//
+// Back up Pulumi.{stack}.yaml to the Pulumi state bucket as a managed asset so
+// that (a) edits appear as a normal diff in `pulumi preview` and (b) the file
+// can be restored on another machine via `npm run restore-config <stack>`.
+
+const backendUrl   = process.env["PULUMI_BACKEND_URL"] ?? "";
+const backendMatch = backendUrl.match(/^s3:\/\/([^/]+)/);
+if (backendMatch) {
+    const stateBucket = backendMatch[1];
+    const stackName   = pulumi.getStack();
+    const configPath  = path.resolve(__dirname, "..", `Pulumi.${stackName}.yaml`);
+    if (fs.existsSync(configPath)) {
+        new aws.s3.BucketObjectv2("stack-config-backup", {
+            bucket:      stateBucket,
+            key:         `stack-configs/Pulumi.${stackName}.yaml`,
+            source:      new pulumi.asset.FileAsset(configPath),
+            contentType: "text/yaml; charset=utf-8",
+        });
+    }
+}
 
 // ─── Resource Creation ──────────────────────────────────────────────────────────────
 

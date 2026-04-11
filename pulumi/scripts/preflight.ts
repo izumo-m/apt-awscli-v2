@@ -1,26 +1,21 @@
 /**
- * pre-flight: Module responsible for Lambda builds and source diff display.
- *
- * ## Build guarantee
- * Pulumi evaluates FileArchive hashes during the plan phase, so the archive
- * must exist before any pulumi command.  checkAndBuild() (src/check-and-build.ts)
- * is called from up.ts / preview.ts to ensure this.
+ * pre-flight: helpers for source diff display and shared script utilities.
  *
  * ## Archive cache
  * Built archives are placed at pulumi.out/.cache/{hash}.zip (PulumiAsset).
  * The hash takes both source files and lambdaArch as inputs, so changing
  * the architecture also changes the hash (= path).
- * If the archive already exists, the rebuild is skipped.
  *
  * ## Source snapshots
  * Snapshots are saved to pulumi.out/assets.{hash}/ (PulumiAsset).
- * createCurrentSnapshot(lambdaArch) is called after a successful pulumi up for use in the next preview --diff.
- * Snapshots are not created during preview.
+ * They are created by src/check-and-build.ts during Pulumi program evaluation
+ * — i.e. whenever `pulumi preview` or `pulumi up` runs — so no wrapper script
+ * post-hook is involved.
  *
  * ## Source diff display
  * showSourceDiff(deployedHash, lambdaArch) compares assets.{deployedHash}/ with the current source
  * and displays a unified diff. deployedHash is the deployed hash obtained via the Automation API.
- * If assets.{deployedHash}/ does not exist, no diff is shown (becomes available after npm run up).
+ * If assets.{deployedHash}/ does not exist, no diff is shown (becomes available after the next pulumi up).
  */
 
 import { spawnSync } from "child_process";
@@ -46,13 +41,6 @@ export function createLambdaAsset(lambdaDir: string, lambdaArch: string): Pulumi
     const files = watchedFiles(lambdaDir);
     const hash  = computeSourceHash(files, lambdaDir, [lambdaArch]);
     return new PulumiAsset(hash, files, lambdaDir);
-}
-
-// ─── Source Snapshots ────────────────────────────────────────────────────────
-
-/** Save the current source as a snapshot after a successful pulumi up (for the next preview --diff). */
-export function createCurrentSnapshot(lambdaArch: string): void {
-    createLambdaAsset(LAMBDA_DIR, lambdaArch).createSnapshot(PULUMI_OUT_DIR);
 }
 
 // ─── Source Diff Display ─────────────────────────────────────────────────────
@@ -149,7 +137,7 @@ function printFileDiff(oldPath: string | null, newPath: string | null, relPath: 
  * lambdaArch is the current architecture obtained from pulumi config get.
  *
  * - Snapshot exists: show unified diff between assets.{deployedHash}/ and current source
- * - Snapshot missing: show message only (resolved by running npm run up once)
+ * - Snapshot missing: show message only (resolved by running pulumi preview or pulumi up once)
  * - No diff: do nothing
  */
 export function showSourceDiff(deployedHash: string, lambdaArch: string): void {
@@ -160,7 +148,7 @@ export function showSourceDiff(deployedHash: string, lambdaArch: string): void {
 
     const oldDir = path.join(PULUMI_OUT_DIR, `assets.${deployedHash}`);
     if (!fs.existsSync(oldDir)) {
-        console.log(`Lambda source changed (deployed snapshot ${deployedHash.slice(0, 12)} not found; run npm run up once to capture baseline)`);
+        console.log(`Lambda source changed (deployed snapshot ${deployedHash.slice(0, 12)} not found; run pulumi preview/up once to capture baseline)`);
         return;
     }
 
@@ -280,35 +268,6 @@ export function getCurrentStackName(): string {
 
     _cachedStackName = name;
     return name;
-}
-
-// ─── Save Config File to Stack Tags ─────────────────────────────────────────
-
-/**
- * Save the contents of Pulumi.{stack}.yaml to the Pulumi state stack tag (stack-config).
- * Called after a successful pulumi up. Failures only produce warnings (do not undo the up).
- */
-export function saveStackConfigToTag(stackName: string): void {
-    const configPath = path.join(PULUMI_DIR, `Pulumi.${stackName}.yaml`);
-    if (!fs.existsSync(configPath)) {
-        process.stderr.write(`Warning: Pulumi.${stackName}.yaml not found, skipping stack tag update.\n`);
-        return;
-    }
-
-    const encoded = Buffer.from(fs.readFileSync(configPath, "utf8")).toString("base64");
-    const result  = spawnSync(
-        "pulumi", ["stack", "tag", "set", "stack-config", encoded],
-        { cwd: PULUMI_DIR, stdio: ["pipe", "pipe", "inherit"], encoding: "utf8" },
-    );
-
-    if (result.status !== 0) {
-        process.stderr.write(
-            `Warning: failed to save stack config to Pulumi state tag.\n` +
-            `  To retry: pulumi stack tag set stack-config "$(base64 -w0 Pulumi.${stackName}.yaml)"\n`
-        );
-    } else {
-        console.log(`Stack config saved to Pulumi state (stack: ${stackName}).`);
-    }
 }
 
 // ─── Config ─────────────────────────────────────────────────────────────────

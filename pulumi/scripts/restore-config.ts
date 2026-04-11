@@ -1,18 +1,24 @@
 /**
- * Restore Pulumi.{stack}.yaml from Pulumi state stack tags.
+ * Restore Pulumi.{stack}.yaml from the Pulumi state bucket.
+ *
+ * The file is kept in sync by an `aws.s3.BucketObjectv2` resource declared in
+ * src/index.ts, which uploads it to `s3://<state-bucket>/stack-configs/Pulumi.{stack}.yaml`
+ * on every `pulumi up`. This script reads that object directly via the AWS SDK
+ * (no Pulumi stack selection required).
  *
  * Usage:
  *   npm run restore-config <stack>
  *
  * Prerequisites:
- *   pulumi login <backendUrl>
+ *   PULUMI_BACKEND_URL=s3://<state-bucket>
+ *   AWS credentials with GetObject permission on the state bucket
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import * as readline from "readline";
-import { spawnSync } from "child_process";
-import { handleError, PULUMI_DIR } from "./preflight";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { handleError, addErrorContext, getBackendS3, PULUMI_DIR } from "./preflight";
 
 function confirm(question: string): Promise<boolean> {
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -25,12 +31,12 @@ function confirm(question: string): Promise<boolean> {
 }
 
 /**
- * Restore Pulumi.{stack}.yaml from stack tags.
+ * Restore Pulumi.{stack}.yaml from the state bucket.
  *
- * - Tag present + local absent → restore from tag
- * - Tag present + local present → prompt to overwrite (local changes will be lost)
- * - Tag absent + local present → keep local as-is
- * - Tag absent + local absent → error (prompt to copy from sample)
+ * - Remote present + local absent  → restore from S3
+ * - Remote present + local present → prompt to overwrite (local changes will be lost)
+ * - Remote absent  + local present → keep local as-is
+ * - Remote absent  + local absent  → error (prompt to copy from sample)
  */
 async function main(): Promise<void> {
     const stackName = process.argv[2];
@@ -39,29 +45,34 @@ async function main(): Promise<void> {
         process.exit(1);
     }
 
+    const backend = getBackendS3();
+    if (!backend) {
+        process.stderr.write("Error: PULUMI_BACKEND_URL must be set to an s3:// URL.\n");
+        process.exit(1);
+    }
+
     const configFileName = `Pulumi.${stackName}.yaml`;
     const localPath      = path.join(PULUMI_DIR, configFileName);
     const localExists    = fs.existsSync(localPath);
 
-    // Read from Pulumi state stack tags
-    const tagResult = spawnSync(
-        "pulumi", ["stack", "tag", "get", "stack-config", "--stack", stackName],
-        { cwd: PULUMI_DIR, stdio: ["pipe", "pipe", "pipe"], encoding: "utf8" },
-    );
+    const key = `stack-configs/${configFileName}`;
+    const s3  = new S3Client({});
+    addErrorContext(s3);
 
-    let tagContent: string | null = null;
-    if (tagResult.status === 0) {
-        const encoded = tagResult.stdout.trim();
-        if (encoded) {
-            try { tagContent = Buffer.from(encoded, "base64").toString("utf8"); } catch { /* invalid */ }
-        }
+    let remoteContent: string | null = null;
+    try {
+        const res = await s3.send(new GetObjectCommand({ Bucket: backend.bucket, Key: key }));
+        remoteContent = (await res.Body!.transformToString("utf8")) ?? "";
+    } catch (e: any) {
+        const status = e.$metadata?.httpStatusCode;
+        if (e.name !== "NoSuchKey" && status !== 404) throw e;
     }
 
-    if (tagContent !== null) {
+    if (remoteContent !== null) {
         if (localExists) {
             const ok = await confirm(
                 `${configFileName} already exists locally.\n` +
-                `Replace it with the version stored in Pulumi stack state?\n` +
+                `Replace it with the version stored in s3://${backend.bucket}/${key}?\n` +
                 `  WARNING: Any local edits to ${configFileName} will be lost.\n` +
                 `Proceed? [y/N] `
             );
@@ -70,17 +81,17 @@ async function main(): Promise<void> {
                 return;
             }
         }
-        fs.writeFileSync(localPath, tagContent, "utf8");
-        console.log(`Restored ${configFileName} from Pulumi stack state.`);
+        fs.writeFileSync(localPath, remoteContent, "utf8");
+        console.log(`Restored ${configFileName} from s3://${backend.bucket}/${key}`);
     } else {
         if (!localExists) {
-            process.stderr.write(`Error: ${configFileName} not found locally or in Pulumi stack state.\n`);
+            process.stderr.write(`Error: ${configFileName} not found locally or at s3://${backend.bucket}/${key}.\n`);
             process.stderr.write(`For a new setup, copy and edit the sample:\n`);
             process.stderr.write(`  cp Pulumi.sample.yaml ${configFileName}\n`);
             process.stderr.write(`  $EDITOR ${configFileName}\n`);
             process.exit(1);
         }
-        console.log(`${configFileName} not found in Pulumi stack state. Using local file as-is.`);
+        console.log(`${configFileName} not found at s3://${backend.bucket}/${key}. Using local file as-is.`);
     }
 }
 

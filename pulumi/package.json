@@ -4,8 +4,7 @@
   "scripts": {
     "bootstrap": "ts-node scripts/bootstrap.ts",
     "build": "tsc",
-    "preview": "ts-node scripts/preview.ts",
-    "up": "ts-node scripts/up.ts",
+    "diff": "ts-node scripts/diff.ts",
     "up:iam": "ts-node scripts/up-iam.ts",
     "invoke": "ts-node scripts/invoke.ts",
     "logs": "ts-node scripts/logs.ts",
