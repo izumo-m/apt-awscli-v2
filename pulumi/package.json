@@ -1,6 +1,6 @@
 {
   "name": "apt-awscli-v2-pulumi",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "scripts": {
     "bootstrap": "ts-node scripts/bootstrap.ts",
     "build": "tsc",
@@ -16,20 +16,20 @@
     "generate-index-html": "ts-node scripts/generate-index-html.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-cloudwatch-logs": "^3.1025.0",
-    "@aws-sdk/client-lambda": "^3.1025.0",
-    "@aws-sdk/client-s3": "^3.1025.0",
-    "@aws-sdk/client-sns": "^3.1025.0",
-    "@aws-sdk/client-ssm": "^3.1025.0",
-    "@pulumi/aws": "^7.24.0",
-    "@pulumi/pulumi": "^3.229.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.1029.0",
+    "@aws-sdk/client-lambda": "^3.1029.0",
+    "@aws-sdk/client-s3": "^3.1029.0",
+    "@aws-sdk/client-sns": "^3.1029.0",
+    "@aws-sdk/client-ssm": "^3.1029.0",
+    "@pulumi/aws": "^7.25.0",
+    "@pulumi/pulumi": "^3.230.0",
     "js-yaml": "^4.1.1",
-    "marked": "^17.0.6",
+    "marked": "^18.0.0",
     "openpgp": "^6.3.0"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^25.5.2",
+    "@types/node": "^25.6.0",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.2"
   }
