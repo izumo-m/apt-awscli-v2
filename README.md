@@ -55,3 +55,7 @@ To also remove the repository configuration:
 sudo rm /etc/apt/sources.list.d/apt-awscli-v2.list
 sudo rm /usr/share/keyrings/apt-awscli-v2.gpg
 ```
+
+---
+
+Source: https://github.com/izumo-m/apt-awscli-v2
