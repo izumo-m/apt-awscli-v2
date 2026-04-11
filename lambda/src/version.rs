@@ -1,9 +1,8 @@
 use anyhow::{Context, Result};
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use regex::Regex;
 
 /// Fetch the latest AWS CLI v2 version from GitHub tags.
-/// Only returns versions that are at least 1 day old.
 /// Returns the version string and the release datetime.
 ///
 /// We scrape the GitHub tags HTML page instead of using the GitHub API because
@@ -11,8 +10,6 @@ use regex::Regex;
 /// whereas the API would require multiple requests (tags + commits) to get the same
 /// information.
 pub async fn fetch_latest_version() -> Result<(String, DateTime<Utc>)> {
-    let threshold = Utc::now() - Duration::hours(24);
-
     let html = reqwest::get("https://github.com/aws/aws-cli/tags")
         .await
         .context("Failed to fetch GitHub tags page")?
@@ -20,24 +17,20 @@ pub async fn fetch_latest_version() -> Result<(String, DateTime<Utc>)> {
         .await
         .context("Failed to read GitHub tags response body")?;
 
-    parse_latest_version(&html, threshold)
+    parse_latest_version(&html)
 }
 
-/// Parse the GitHub tags HTML and return the latest AWS CLI v2 version
-/// whose release datetime is older than `threshold`.
-fn parse_latest_version(html: &str, threshold: DateTime<Utc>) -> Result<(String, DateTime<Utc>)> {
+/// Parse the GitHub tags HTML and return the latest AWS CLI v2 version.
+fn parse_latest_version(html: &str) -> Result<(String, DateTime<Utc>)> {
     let version_re = Regex::new(r"/aws/aws-cli/releases/tag/(2\.\d+\.\d+)")?;
-    parse_github_tags(html, threshold, &version_re, "No AWS CLI v2 version found that is at least 1 day old")
+    parse_github_tags(html, &version_re, "No AWS CLI v2 version found")
 }
 
 /// Fetch the latest Session Manager Plugin version from GitHub tags.
-/// Only returns versions that are at least 1 day old.
 /// Returns the version string and the release datetime.
 ///
 /// See [`fetch_latest_version`] for why we scrape HTML instead of using the API.
 pub async fn fetch_session_manager_plugin_version() -> Result<(String, DateTime<Utc>)> {
-    let threshold = Utc::now() - Duration::hours(24);
-
     let html = reqwest::get("https://github.com/aws/session-manager-plugin/tags")
         .await
         .context("Failed to fetch Session Manager Plugin GitHub tags page")?
@@ -45,30 +38,26 @@ pub async fn fetch_session_manager_plugin_version() -> Result<(String, DateTime<
         .await
         .context("Failed to read Session Manager Plugin GitHub tags response body")?;
 
-    parse_session_manager_plugin_version(&html, threshold)
+    parse_session_manager_plugin_version(&html)
 }
 
-/// Parse the GitHub tags HTML and return the latest Session Manager Plugin version
-/// whose release datetime is older than `threshold`.
-fn parse_session_manager_plugin_version(html: &str, threshold: DateTime<Utc>) -> Result<(String, DateTime<Utc>)> {
+/// Parse the GitHub tags HTML and return the latest Session Manager Plugin version.
+fn parse_session_manager_plugin_version(html: &str) -> Result<(String, DateTime<Utc>)> {
     let version_re = Regex::new(r"/aws/session-manager-plugin/releases/tag/(\d+\.\d+\.\d+\.\d+)")?;
-    parse_github_tags(html, threshold, &version_re, "No Session Manager Plugin version found that is at least 1 day old")
+    parse_github_tags(html, &version_re, "No Session Manager Plugin version found")
 }
 
-/// Scan a GitHub tags HTML page and return the first version whose release datetime
-/// is older than `threshold`.
+/// Scan a GitHub tags HTML page and return the first (latest) version with its release datetime.
 ///
 /// Matches version tags and `datetime` attributes in document order.
-/// When a version token is followed immediately by a datetime older than the threshold,
+/// When a version token is followed immediately by a datetime,
 /// that (version, datetime) pair is returned. A datetime that belongs to a different
 /// version (e.g. a 1.x entry interleaved with 2.x) resets the current candidate.
 fn parse_github_tags(
     html: &str,
-    threshold: DateTime<Utc>,
     version_re: &Regex,
     not_found_msg: &str,
 ) -> Result<(String, DateTime<Utc>)> {
-    let threshold_str = threshold.format("%Y-%m-%dT%H:%M:%SZ").to_string();
     let datetime_re = Regex::new(r#"datetime="([^"]+)""#)?;
 
     // Collect version and datetime tokens with their byte positions, then sort by position
@@ -86,8 +75,8 @@ fn parse_github_tags(
 
     entries.sort_by_key(|(pos, _)| *pos);
 
-    // Walk tokens: remember the most recent version tag; when we see a datetime
-    // older than the threshold, return the remembered version.
+    // Walk tokens: remember the most recent version tag; when we see a datetime,
+    // return the remembered version.
     // A datetime that does not follow a version (i.e. belongs to another tag) clears
     // the candidate so we don't misattribute it.
     let mut current_tag: Option<String> = None;
@@ -99,12 +88,10 @@ fn parse_github_tags(
             }
             Token::Datetime(dt) => {
                 if let Some(ref tag) = current_tag {
-                    if dt.as_str() < threshold_str.as_str() {
-                        let released_at = dt
-                            .parse::<DateTime<Utc>>()
-                            .with_context(|| format!("Failed to parse datetime: {dt}"))?;
-                        return Ok((tag.clone(), released_at));
-                    }
+                    let released_at = dt
+                        .parse::<DateTime<Utc>>()
+                        .with_context(|| format!("Failed to parse datetime: {dt}"))?;
+                    return Ok((tag.clone(), released_at));
                 }
                 current_tag = None;
             }
@@ -122,11 +109,7 @@ enum Token {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// threshold from now (= 1 day ago)
-    fn now_threshold() -> DateTime<Utc> {
-        Utc::now() - Duration::hours(24)
-    }
+    use chrono::Duration;
 
     /// Format a DateTime as the ISO 8601 string used in GitHub's HTML.
     fn fmt(dt: DateTime<Utc>) -> String {
@@ -155,90 +138,68 @@ mod tests {
     }
 
     #[test]
-    fn returns_first_old_enough_v2() {
-        let th = now_threshold();
+    fn returns_latest_v2() {
+        let now = Utc::now();
         let html = awscli_html(&[
-            ("2.33.22", th + Duration::hours(1)),  // too recent
-            ("2.33.21", th - Duration::hours(24)), // old enough
+            ("2.33.22", now - Duration::hours(1)),
+            ("2.33.21", now - Duration::hours(48)),
         ]);
-        let (ver, rel) = parse_latest_version(&html, th).unwrap();
-        assert_eq!(ver, "2.33.21");
-        assert_eq!(fmt(rel), fmt(th - Duration::hours(24)));
-    }
-
-    #[test]
-    fn first_entry_already_old_enough() {
-        let th = now_threshold();
-        let html = awscli_html(&[
-            ("2.33.22", th - Duration::hours(48)),
-            ("2.33.21", th - Duration::hours(72)),
-        ]);
-        let (ver, _) = parse_latest_version(&html, th).unwrap();
+        let (ver, rel) = parse_latest_version(&html).unwrap();
         assert_eq!(ver, "2.33.22");
+        assert_eq!(fmt(rel), fmt(now - Duration::hours(1)));
     }
 
     #[test]
     fn skips_1x_versions() {
-        let th = now_threshold();
+        let now = Utc::now();
         let html = awscli_html(&[
-            ("1.44.39", th - Duration::hours(48)),
-            ("2.33.21", th - Duration::hours(48)),
+            ("1.44.39", now - Duration::hours(48)),
+            ("2.33.21", now - Duration::hours(48)),
         ]);
-        let (ver, _) = parse_latest_version(&html, th).unwrap();
+        let (ver, _) = parse_latest_version(&html).unwrap();
         assert_eq!(ver, "2.33.21");
     }
 
     #[test]
     fn interleaved_1x_and_2x() {
-        // Real GitHub layout: 2.x and 1.x alternate
-        let th = now_threshold();
+        let now = Utc::now();
         let html = awscli_html(&[
-            ("2.33.22", th + Duration::hours(1)),  // too recent
-            ("1.44.39", th + Duration::hours(1)),  // 1.x, skip
-            ("2.33.21", th - Duration::hours(24)), // old enough
-            ("1.44.38", th - Duration::hours(24)), // 1.x, skip
+            ("2.33.22", now - Duration::hours(1)),
+            ("1.44.39", now - Duration::hours(1)),
+            ("2.33.21", now - Duration::hours(24)),
+            ("1.44.38", now - Duration::hours(24)),
         ]);
-        let (ver, rel) = parse_latest_version(&html, th).unwrap();
-        assert_eq!(ver, "2.33.21");
-        assert_eq!(fmt(rel), fmt(th - Duration::hours(24)));
+        let (ver, rel) = parse_latest_version(&html).unwrap();
+        assert_eq!(ver, "2.33.22");
+        assert_eq!(fmt(rel), fmt(now - Duration::hours(1)));
     }
 
     #[test]
-    fn v1x_old_datetime_not_attributed_to_v2x() {
-        // 2.x is too recent, followed by 1.x with an old datetime.
-        // Must NOT return 2.x with 1.x's datetime.
-        let th = now_threshold();
+    fn v1x_datetime_not_attributed_to_v2x() {
+        // 2.x tag followed by 1.x datetime: the datetime belongs to 1.x,
+        // so 2.x should not pick it up. But 2.x has no datetime of its own,
+        // so only 1.x's datetime resets the candidate.
+        let now = Utc::now();
         let html = awscli_html(&[
-            ("2.33.22", th + Duration::hours(1)),  // too recent
-            ("1.44.39", th - Duration::hours(72)), // 1.x with old date
+            ("1.44.39", now - Duration::hours(72)),
         ]);
-        let result = parse_latest_version(&html, th);
-        assert!(result.is_err(), "Should not return 2.33.22 with 1.x's datetime");
-    }
-
-    #[test]
-    fn all_too_recent() {
-        let th = now_threshold();
-        let html = awscli_html(&[
-            ("2.33.22", th + Duration::hours(2)),
-            ("2.33.21", th + Duration::hours(1)),
-        ]);
-        assert!(parse_latest_version(&html, th).is_err());
+        let result = parse_latest_version(&html);
+        assert!(result.is_err(), "Should not return 1.x version");
     }
 
     #[test]
     fn no_2x_versions() {
-        let th = now_threshold();
+        let now = Utc::now();
         let html = awscli_html(&[
-            ("1.44.39", th - Duration::hours(48)),
-            ("1.44.38", th - Duration::hours(72)),
+            ("1.44.39", now - Duration::hours(48)),
+            ("1.44.38", now - Duration::hours(72)),
         ]);
-        assert!(parse_latest_version(&html, th).is_err());
+        assert!(parse_latest_version(&html).is_err());
     }
 
     #[test]
     fn empty_html() {
-        assert!(parse_latest_version("<html></html>", now_threshold()).is_err());
+        assert!(parse_latest_version("<html></html>").is_err());
     }
 
     // --- Session Manager Plugin tests ---
@@ -248,29 +209,19 @@ mod tests {
     }
 
     #[test]
-    fn smp_returns_first_old_enough() {
-        let th = now_threshold();
+    fn smp_returns_latest() {
+        let now = Utc::now();
         let html = smp_html(&[
-            ("1.2.708.0", th + Duration::hours(1)),  // too recent
-            ("1.2.707.0", th - Duration::hours(24)), // old enough
+            ("1.2.708.0", now - Duration::hours(1)),
+            ("1.2.707.0", now - Duration::hours(24)),
         ]);
-        let (ver, rel) = parse_session_manager_plugin_version(&html, th).unwrap();
-        assert_eq!(ver, "1.2.707.0");
-        assert_eq!(fmt(rel), fmt(th - Duration::hours(24)));
-    }
-
-    #[test]
-    fn smp_all_too_recent() {
-        let th = now_threshold();
-        let html = smp_html(&[
-            ("1.2.708.0", th + Duration::hours(2)),
-            ("1.2.707.0", th + Duration::hours(1)),
-        ]);
-        assert!(parse_session_manager_plugin_version(&html, th).is_err());
+        let (ver, rel) = parse_session_manager_plugin_version(&html).unwrap();
+        assert_eq!(ver, "1.2.708.0");
+        assert_eq!(fmt(rel), fmt(now - Duration::hours(1)));
     }
 
     #[test]
     fn smp_empty_html() {
-        assert!(parse_session_manager_plugin_version("<html></html>", now_threshold()).is_err());
+        assert!(parse_session_manager_plugin_version("<html></html>").is_err());
     }
 }

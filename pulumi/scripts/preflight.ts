@@ -1,26 +1,21 @@
 /**
- * pre-flight: Module responsible for Lambda builds and source diff display.
- *
- * ## Build guarantee
- * Pulumi evaluates FileArchive hashes during the plan phase, so the archive
- * must exist before any pulumi command.  checkAndBuild() (src/check-and-build.ts)
- * is called from up.ts / preview.ts to ensure this.
+ * pre-flight: helpers for source diff display and shared script utilities.
  *
  * ## Archive cache
  * Built archives are placed at pulumi.out/.cache/{hash}.zip (PulumiAsset).
  * The hash takes both source files and lambdaArch as inputs, so changing
  * the architecture also changes the hash (= path).
- * If the archive already exists, the rebuild is skipped.
  *
  * ## Source snapshots
  * Snapshots are saved to pulumi.out/assets.{hash}/ (PulumiAsset).
- * createCurrentSnapshot(lambdaArch) is called after a successful pulumi up for use in the next preview --diff.
- * Snapshots are not created during preview.
+ * They are created by src/check-and-build.ts during Pulumi program evaluation
+ * — i.e. whenever `pulumi preview` or `pulumi up` runs — so no wrapper script
+ * post-hook is involved.
  *
  * ## Source diff display
  * showSourceDiff(deployedHash, lambdaArch) compares assets.{deployedHash}/ with the current source
  * and displays a unified diff. deployedHash is the deployed hash obtained via the Automation API.
- * If assets.{deployedHash}/ does not exist, no diff is shown (becomes available after npm run up).
+ * If assets.{deployedHash}/ does not exist, no diff is shown (becomes available after the next pulumi up).
  */
 
 import { spawnSync } from "child_process";
@@ -46,13 +41,6 @@ export function createLambdaAsset(lambdaDir: string, lambdaArch: string): Pulumi
     const files = watchedFiles(lambdaDir);
     const hash  = computeSourceHash(files, lambdaDir, [lambdaArch]);
     return new PulumiAsset(hash, files, lambdaDir);
-}
-
-// ─── Source Snapshots ────────────────────────────────────────────────────────
-
-/** Save the current source as a snapshot after a successful pulumi up (for the next preview --diff). */
-export function createCurrentSnapshot(lambdaArch: string): void {
-    createLambdaAsset(LAMBDA_DIR, lambdaArch).createSnapshot(PULUMI_OUT_DIR);
 }
 
 // ─── Source Diff Display ─────────────────────────────────────────────────────
@@ -149,7 +137,7 @@ function printFileDiff(oldPath: string | null, newPath: string | null, relPath: 
  * lambdaArch is the current architecture obtained from pulumi config get.
  *
  * - Snapshot exists: show unified diff between assets.{deployedHash}/ and current source
- * - Snapshot missing: show message only (resolved by running npm run up once)
+ * - Snapshot missing: show message only (resolved by running pulumi preview or pulumi up once)
  * - No diff: do nothing
  */
 export function showSourceDiff(deployedHash: string, lambdaArch: string): void {
@@ -160,7 +148,7 @@ export function showSourceDiff(deployedHash: string, lambdaArch: string): void {
 
     const oldDir = path.join(PULUMI_OUT_DIR, `assets.${deployedHash}`);
     if (!fs.existsSync(oldDir)) {
-        console.log(`Lambda source changed (deployed snapshot ${deployedHash.slice(0, 12)} not found; run npm run up once to capture baseline)`);
+        console.log(`Lambda source changed (deployed snapshot ${deployedHash.slice(0, 12)} not found; run pulumi preview/up once to capture baseline)`);
         return;
     }
 
@@ -182,20 +170,25 @@ export function showSourceDiff(deployedHash: string, lambdaArch: string): void {
 
 /**
  * Extract the deployed source hash from the Automation API exportStack() result.
- * Reads the Lambda Function's code.path (FileArchive) which contains the hash in the filename.
- * Falls back to the legacy Command-based format for backward compatibility during migration.
+ * Reads the Lambda Function's sourceCodeHash, which is always kept up-to-date
+ * (unlike code.path which is frozen by ignoreChanges: ["code"]).
+ * Falls back to code.path, then to the legacy Command-based format.
  */
 export function extractDeployedHash(deployment: Deployment): string {
     type Resource = {
         type?: string;
         inputs?: {
+            sourceCodeHash?: string;
             code?: { path?: string };
             environment?: { BUILD_OUTPUT_HASH?: string; BUILD_OUTPUT_ZIP?: string; BUILD_EXPECTED_HASH?: string };
         };
     };
     for (const r of (deployment.deployment?.resources ?? []) as Resource[]) {
-        // Current: extract hash from Lambda code FileArchive path (.cache/{hash}.zip)
         if (r.type === "aws:lambda/function:Function") {
+            // Preferred: sourceCodeHash is always updated (not subject to ignoreChanges)
+            const hash = r.inputs?.sourceCodeHash;
+            if (typeof hash === "string" && /^[0-9a-f]{64}$/.test(hash)) return hash;
+            // Fallback: extract from code.path (may be stale due to ignoreChanges: ["code"])
             const codePath = r.inputs?.code?.path;
             if (codePath) {
                 const match = codePath.match(/([0-9a-f]{64})\.zip$/);
@@ -231,97 +224,50 @@ export function getLambdaArch(): string {
 export interface BackendS3 {
     bucket: string;
     prefix: string;  // Prefix (with trailing slash, or "" if empty)
-    url:    string;  // Original value of APT_AWSCLI_V2_BACKEND
+    url:    string;  // Original value of PULUMI_BACKEND_URL
 }
 
 /**
- * Parse the APT_AWSCLI_V2_BACKEND environment variable and return a BackendS3.
- * Returns null if not set.
+ * Parse the PULUMI_BACKEND_URL environment variable and return a BackendS3.
+ * Returns null if not set or not an S3 backend.
  */
 export function getBackendS3(): BackendS3 | null {
-    const raw = process.env["APT_AWSCLI_V2_BACKEND"];
+    const raw = process.env["PULUMI_BACKEND_URL"];
     if (!raw) return null;
     const match = raw.match(/^s3:\/\/([^/]+)(\/.*)?$/);
-    if (!match) throw new Error(`Invalid APT_AWSCLI_V2_BACKEND: "${raw}" (expected s3://bucket[/prefix])`);
+    if (!match) return null;  // not an S3 backend (e.g. file://, https://)
     const bucket    = match[1];
     const prefixRaw = match[2] ?? "";
     const prefix    = prefixRaw ? prefixRaw.replace(/^\//, "").replace(/\/?$/, "/") : "";
     return { bucket, prefix, url: raw };
 }
 
-/**
- * Return environment variables for child processes.
- * Exits with an error if APT_AWSCLI_V2_BACKEND is not set.
- */
-export function getPulumiEnv(): NodeJS.ProcessEnv {
-    const backend = getBackendS3();
-    if (!backend) {
-        process.stderr.write("Error: APT_AWSCLI_V2_BACKEND is not set.\n");
-        process.stderr.write("  e.g.: export APT_AWSCLI_V2_BACKEND=s3://my-pulumi-state\n");
-        process.exit(1);
-    }
-    return { ...process.env, PULUMI_BACKEND_URL: backend.url };
-}
-
 // ─── Stack Name ─────────────────────────────────────────────────────────────
 
+let _cachedStackName: string | undefined;
+
 /**
- * Return the stack name from the APT_AWSCLI_V2_STACK environment variable.
- * Exits with an error if not set.
+ * Return the currently selected Pulumi stack name.
+ * Requires that the user has already run `pulumi stack select <name>`.
  */
 export function getCurrentStackName(): string {
-    const envStack = process.env["APT_AWSCLI_V2_STACK"];
-    if (!envStack) {
-        process.stderr.write("Error: APT_AWSCLI_V2_STACK is not set.\n");
-        process.stderr.write("  e.g.: export APT_AWSCLI_V2_STACK=dev\n");
+    if (_cachedStackName) return _cachedStackName;
+
+    const result = spawnSync("pulumi", ["stack", "--show-name"], {
+        cwd: PULUMI_DIR,
+        stdio: ["pipe", "pipe", "pipe"],
+        encoding: "utf8",
+    });
+
+    const name = result.stdout?.trim();
+    if (result.status !== 0 || !name) {
+        process.stderr.write("Error: no Pulumi stack selected.\n");
+        process.stderr.write("  Run: pulumi stack select <name>\n");
         process.exit(1);
     }
-    return envStack;
-}
 
-// ─── Stack Config File Verification ─────────────────────────────────────────
-
-/**
- * Verify that Pulumi.{stack}.yaml exists locally.
- * Exits with an error message if not found.
- * Run "npm run bootstrap" to restore.
- */
-export function ensureStackConfig(stackName: string): void {
-    const configFileName = `Pulumi.${stackName}.yaml`;
-    if (fs.existsSync(path.join(PULUMI_DIR, configFileName))) return;
-
-    process.stderr.write(`Error: ${configFileName} not found.\n`);
-    process.stderr.write(`Run "npm run bootstrap" to restore from Pulumi stack state.\n`);
-    process.exit(1);
-}
-
-// ─── Save Config File to Stack Tags ─────────────────────────────────────────
-
-/**
- * Save the contents of Pulumi.{stack}.yaml to the Pulumi state stack tag (stack-config).
- * Called after a successful pulumi up. Failures only produce warnings (do not undo the up).
- */
-export function saveStackConfigToTag(stackName: string, pulumiEnv: NodeJS.ProcessEnv): void {
-    const configPath = path.join(PULUMI_DIR, `Pulumi.${stackName}.yaml`);
-    if (!fs.existsSync(configPath)) {
-        process.stderr.write(`Warning: Pulumi.${stackName}.yaml not found, skipping stack tag update.\n`);
-        return;
-    }
-
-    const encoded = Buffer.from(fs.readFileSync(configPath, "utf8")).toString("base64");
-    const result  = spawnSync(
-        "pulumi", ["stack", "tag", "set", "stack-config", encoded, "--stack", stackName],
-        { cwd: PULUMI_DIR, env: pulumiEnv, stdio: ["pipe", "pipe", "inherit"], encoding: "utf8" },
-    );
-
-    if (result.status !== 0) {
-        process.stderr.write(
-            `Warning: failed to save stack config to Pulumi state tag.\n` +
-            `  To retry: pulumi stack tag set stack-config "$(base64 -w0 Pulumi.${stackName}.yaml)"\n`
-        );
-    } else {
-        console.log(`Stack config saved to Pulumi state (stack: ${stackName}).`);
-    }
+    _cachedStackName = name;
+    return name;
 }
 
 // ─── Config ─────────────────────────────────────────────────────────────────
@@ -345,8 +291,7 @@ export function getConfig(key: string, defaultValue?: string): string | undefine
 
 /** Return the Lambda function name from Pulumi config (`{resourcePrefix}-lambda`). */
 export function getLambdaName(): string {
-    const prefix = getConfig("aptAwscliV2:resourcePrefix");
-    if (!prefix) throw new Error("aptAwscliV2:resourcePrefix is not configured");
+    const prefix = getConfig("aptAwscliV2:resourcePrefix") || "apt-awscli-v2";
     return `${prefix}-lambda`;
 }
 

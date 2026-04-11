@@ -55,7 +55,7 @@ export interface AppConfig {
 
 export function loadConfig(): AppConfig {
     const config         = new pulumi.Config("aptAwscliV2");
-    const resourcePrefix = config.require("resourcePrefix");
+    const resourcePrefix = config.get("resourcePrefix") ?? "apt-awscli-v2";
 
     return {
         resourcePrefix,

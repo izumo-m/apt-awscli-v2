@@ -1,7 +1,7 @@
 /**
  * Generate index.html from the top-level README.md.
  *
- * Called from preview.ts / up.ts before pulumi commands so that the
+ * Called from src/index.ts during Pulumi program evaluation so that the
  * generated file is available for BucketObjectv2 during the plan phase.
  * The output is written to pulumi.out/index.html for easy local preview.
  */

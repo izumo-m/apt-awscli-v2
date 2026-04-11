@@ -15,6 +15,7 @@ Running `pulumi up` creates the following AWS resources:
 | IAM Roles | Lambda execution role, EventBridge scheduler role |
 | EventBridge Scheduler | Periodic Lambda execution (default: Wed–Sun UTC 0:00) |
 | CloudWatch Logs | Lambda log retention |
+| SNS Topic + CloudWatch Alarm | Lambda failure email notifications (optional) |
 
 ## Prerequisites
 
@@ -79,70 +80,50 @@ curl -fsSL https://get.pulumi.com | sh
 
 ## Initial Setup
 
-### Install Dependencies and Set Environment Variables
+### Install Dependencies
 
 ```bash
 cd pulumi  # this directory
 npm ci
 ```
 
-Add the following to `pulumi/.env` and load with `direnv` or similar (`.env` is already in `.gitignore`):
+### Create the S3 Backend Bucket
 
 ```bash
-export APT_AWSCLI_V2_BACKEND=s3://your-apt-pulumi-state  # S3 bucket for Pulumi state
-export APT_AWSCLI_V2_STACK=dev                            # Stack name
-export PULUMI_CONFIG_PASSPHRASE=                          # No secrets in state; passphrase not needed
-export PULUMI_PAGER=                                      # Disable pager
+npm run bootstrap -- --backend s3://your-apt-pulumi-state
+
+# To configure versioning (number of versions to retain):
+# npm run bootstrap -- --backend s3://your-apt-pulumi-state --versioning 5
 ```
 
-### Create Configuration File (New Setup Only)
+### Log In and Initialize the Stack
 
-If there is no configuration file in the Pulumi state yet (first-time setup), copy from the sample and edit it.
+```bash
+pulumi login s3://your-apt-pulumi-state
+pulumi stack init dev
+```
+
+### Create Configuration File
+
+Copy from the sample and edit:
 
 ```bash
 cp Pulumi.sample.yaml Pulumi.dev.yaml
 $EDITOR Pulumi.dev.yaml
 ```
 
-### Run bootstrap
+Optionally, add the following to `pulumi/.env` and load with `direnv` or similar (`.env` is already in `.gitignore`):
 
 ```bash
-# Creates the S3 bucket, initializes the stack, and syncs the configuration file all at once
-npm run bootstrap
-
-# To configure versioning (number of versions to retain):
-# npm run bootstrap versioning=5
+export PULUMI_BACKEND_URL=s3://your-apt-pulumi-state  # Can replace `pulumi login`
+export PULUMI_CONFIG_PASSPHRASE=                      # No secrets in state; passphrase not needed
+export PULUMI_PAGER=                                  # Disable pager
 ```
-
-`bootstrap` automatically performs the following:
-1. Checks whether the `APT_AWSCLI_V2_BACKEND` S3 bucket exists, and creates it after confirmation if not
-2. Initializes the stack with `pulumi stack select` / `pulumi stack init`
-3. Syncs `Pulumi.{stack}.yaml` with the Pulumi state (stack tags):
-
-   | Local | Pulumi State | Behavior |
-   |---------|---------------|------|
-   | Absent | Present | Restores from state |
-   | Present | Present | Prompts to overwrite with the state version (local changes will be lost) |
-   | Present | Absent | Uses local as-is (new setup) |
-   | Absent | Absent | Exits with error (prompts to copy from sample) |
 
 ### Deploy
 
 ```bash
-npm run up
-# After success, Pulumi.{stack}.yaml is automatically saved as Pulumi state stack tags
-```
-
-### Example Pulumi.dev.yaml Configuration
-
-Define the required configuration in `Pulumi.dev.yaml`. This single file contains all configuration.
-
-```yaml
-config:
-  aptAwscliV2:resourcePrefix: your-prefix
-  aptAwscliV2:email: user@example.com
-  aptAwscliV2:maintainerName: Your Name
-  aptAwscliV2:s3Uri: s3://your-apt-bucket/apt/
+pulumi up
 ```
 
 Running `pulumi up` automatically executes the following:
@@ -150,34 +131,52 @@ Running `pulumi up` automatically executes the following:
 1. Generates a GPG key and registers it in SSM Parameter Store (`SecureString`), if not already present
 2. Creates an S3 bucket and configures the public read policy
 3. Creates IAM roles and policies (for Lambda and the scheduler)
-4. Builds the Lambda function (via Docker) and deploys it
-5. Configures a schedule (default: Wed–Sun UTC 0:00) using EventBridge Scheduler
+4. Builds the Lambda function (via Docker) and deploys it, capturing a source snapshot for later `preview --diff`
+5. Backs up `Pulumi.{stack}.yaml` to the state bucket as a managed `aws.s3.BucketObjectv2`
+6. Configures a schedule (default: Wed–Sun UTC 0:00) using EventBridge Scheduler
+
+### Example Pulumi.dev.yaml Configuration
+
+Define the required configuration in `Pulumi.dev.yaml`. This single file contains all configuration.
+
+```yaml
+config:
+  aptAwscliV2:email: user@example.com
+  aptAwscliV2:maintainerName: Your Name
+  aptAwscliV2:s3Uri: s3://your-apt-bucket/apt/
+```
 
 ## Setup on Another Machine
 
-To use an already-deployed environment on a different machine, `bootstrap` restores the configuration from Pulumi state.
-No need to manually copy `Pulumi.{stack}.yaml`.
+To use an already-deployed environment on a different machine:
 
 ```bash
 cd pulumi
 npm ci
 
-# Set up .env with the same values as the existing stack
-# (see "Install Dependencies and Set Environment Variables" above)
-source .env  # or direnv allow
+pulumi login s3://your-apt-pulumi-state
+pulumi stack select dev
 
-# Restore Pulumi.dev.yaml from Pulumi state and select the stack
-npm run bootstrap
+# Restore Pulumi.dev.yaml from Pulumi state
+npm run restore-config dev
 
-# Start operations immediately
-npm run preview
-npm run up
+# Start operations
+pulumi preview
+pulumi up
 ```
 
 ## Configuration File Synchronization
 
-When you edit `Pulumi.{stack}.yaml`, run `npm run up`; changes are automatically saved as Pulumi state stack tags on success.
-To pull the latest configuration on another machine, re-run `npm run bootstrap` (you will be prompted to confirm overwriting).
+`Pulumi.{stack}.yaml` is backed up to the Pulumi state bucket as a managed asset
+(`aws.s3.BucketObjectv2` at `s3://<state-bucket>/stack-configs/Pulumi.{stack}.yaml`).
+Edits to the file appear as a normal diff in `pulumi preview` and are uploaded
+during `pulumi up` as part of the stack itself — no post-hook involved.
+
+To pull the latest configuration on another machine, run
+`npm run restore-config <stack>` (you will be prompted to confirm overwriting).
+If the state bucket has versioning enabled (see `--versioning` on
+`npm run bootstrap`), historical versions of the file can be inspected with
+`aws s3api list-object-versions` / `get-object --version-id`.
 
 ## Deleting Resources
 
@@ -185,7 +184,7 @@ To pull the latest configuration on another machine, re-run `npm run bootstrap` 
 npm run destroy
 ```
 
-Deletes all AWS resources (Lambda, S3, IAM, EventBridge, etc.). After completion, you are prompted whether to also delete the state bucket (`APT_AWSCLI_V2_BACKEND`).
+Deletes all AWS resources (Lambda, S3, IAM, EventBridge, etc.). If `PULUMI_BACKEND_URL` is set to an S3 URL, you are prompted whether to also delete the state bucket.
 
 ```
 Pulumi stack has been destroyed.
@@ -193,7 +192,7 @@ Do you also want to delete the state bucket "s3://your-apt-pulumi-state"? [y/N]
 ```
 
 - `y` → Empties and deletes the state bucket
-- `N` → Keeps the state bucket (can be reused with `npm run bootstrap` later)
+- `N` → Keeps the state bucket (can be reused later)
 
 ## Deploying in Environments with Restricted IAM Permissions
 
@@ -208,7 +207,7 @@ npm run up:iam   # Deploy only aws:iam/* resources
 ### Developer (Normal operations)
 
 ```bash
-npm run up   # Deploys all resources (skips IAM if unchanged)
+pulumi up    # Deploys all resources (skips IAM if unchanged)
 ```
 
 If there are pending IAM changes, a permission error occurs at the start and execution stops without touching other resources. Ask the administrator to run `npm run up:iam`.
@@ -236,7 +235,7 @@ sudo apt install session-manager-plugin
 
 ## Customization
 
-All configuration is managed through config keys in `Pulumi.*.yaml`. Re-run `npm run up` after making changes.
+All configuration is managed through config keys in `Pulumi.*.yaml`. Re-run `pulumi up` after making changes.
 
 ### Selecting Managed Packages
 
@@ -325,23 +324,28 @@ config:
 
 ### Failure Notifications (SNS Email)
 
-When `notificationEmail` is set, email notifications are sent when Lambda fails due to a crash, timeout, or unhandled exception.
+When `notificationEmail` is set, email notifications are sent when the Lambda function fails.
 
 ```yaml
 config:
   aptAwscliV2:notificationEmail: alert@example.com
 ```
 
-Resources created:
+**Resources created:**
 
-- SNS Topic (`{resourcePrefix}-notification`)
-- SNS Email Subscription
-- CloudWatch MetricAlarm (monitors Lambda `Errors` metric)
+| Resource | Name | Description |
+|----------|------|-------------|
+| SNS Topic | `{resourcePrefix}-notification` | Notification channel |
+| SNS Subscription | (email) | Email subscription to the topic |
+| CloudWatch MetricAlarm | `{resourcePrefix}-lambda-errors` | Triggers on Lambda errors |
 
-**Subscription Confirmation (Important)**
+**Alarm conditions:**
 
-After the first deployment, confirm the subscription **via SDK, not by clicking the email link**.
-Confirming via SDK sets `ConfirmationWasAuthenticated=true`, preventing accidental unsubscription via the email link.
+The CloudWatch Alarm monitors the `AWS/Lambda` → `Errors` metric for the Lambda function. It triggers when the sum of errors in a **60-second period** is **≥ 1**. Missing data is treated as "not breaching" (no false alarms when the function is not invoked). This covers crashes, timeouts, and unhandled exceptions.
+
+**Subscription confirmation (Important)**
+
+After the first deployment, a confirmation email is sent to the configured address. Confirm the subscription **via SDK, not by clicking the email link**:
 
 ```bash
 npm run confirm-subscription -- '<URL from confirmation email>'
@@ -354,9 +358,23 @@ https://sns.<region>.amazonaws.com/?Action=ConfirmSubscription&TopicArn=arn:aws:
 
 > **Note:** Do **not** click the "Confirm subscription" link in the email.
 > Clicking the link sets `ConfirmationWasAuthenticated=false`, allowing anyone to unsubscribe using the same link format.
-> Confirming via SDK requires AWS authentication (console or CLI) to unsubscribe, which is more secure.
+> Confirming via SDK sets `ConfirmationWasAuthenticated=true`, requiring AWS authentication (console or CLI) to unsubscribe, which is more secure.
 
-You can verify behavior with `npm run invoke '{"fail_for_test": true}'`.
+**Verifying notifications:**
+
+```bash
+npm run invoke '{"fail_for_test": true}'
+```
+
+This intentionally raises an exception in the Lambda function. If everything is configured correctly, you should receive an alarm email within a few minutes.
+
+**Changing the email address:**
+
+Update `notificationEmail` in `Pulumi.{stack}.yaml` and run `pulumi up`. A new confirmation email is sent; repeat the SDK confirmation step above.
+
+**Disabling notifications:**
+
+Remove the `notificationEmail` key from `Pulumi.{stack}.yaml` and run `pulumi up`. The SNS Topic, Subscription, and CloudWatch Alarm are deleted.
 
 ### Disabling the Scheduler (Manual Execution Only)
 
@@ -417,7 +435,7 @@ npm run logs -- --since 60         # Logs from the past 60 minutes
 ## Generating index.html
 
 The repository root URL serves an `index.html` generated from the top-level `README.md`.
-This file is automatically generated during `npm run preview` and `npm run up`, and deployed to S3 as a `BucketObjectv2` resource.
+This file is automatically generated during `pulumi preview` and `pulumi up`, and deployed to S3 as a `BucketObjectv2` resource.
 
 To generate it independently (e.g., for local preview):
 
@@ -426,11 +444,25 @@ npm run generate-index-html
 # Output: pulumi.out/index.html
 ```
 
+## npm Scripts Reference
+
+| Script | Description |
+|--------|-------------|
+| `npm run bootstrap` | Create and configure the S3 backend bucket |
+| `npm run restore-config <stack>` | Restore `Pulumi.{stack}.yaml` from the Pulumi state bucket |
+| `npm run diff` | Show a unified diff of Lambda sources vs. the deployed version |
+| `npm run up:iam` | Deploy only IAM resources (for restricted-permission environments) |
+| `npm run destroy` | Run `pulumi destroy` with optional state bucket cleanup |
+| `npm run invoke` | Invoke the Lambda function |
+| `npm run logs` | View CloudWatch Logs (`--follow` / `--since N`) |
+| `npm run confirm-subscription` | Confirm SNS subscription via SDK |
+| `npm run generate-index-html` | Generate `pulumi.out/index.html` from README.md |
+
 ## Pulumi Config Key Reference
 
 | Key | Required | Default | Description |
 |------|:----:|-----------|------|
-| `aptAwscliV2:resourcePrefix` | ✅ | — | Common prefix for all resource names |
+| `aptAwscliV2:resourcePrefix` | | `apt-awscli-v2` | Common prefix for all resource names |
 | `aptAwscliV2:email` | ✅ | — | Maintainer email address |
 | `aptAwscliV2:maintainerName` | ✅ | — | Maintainer name |
 | `aptAwscliV2:s3Uri` | ✅ | — | S3 URI for the APT repository (e.g., `s3://my-bucket/apt/`) |
@@ -491,7 +523,7 @@ This project uses [Semantic Versioning](https://semver.org/) with a single versi
 3. **Deploy**:
 
    ```bash
-   npm run up
+   pulumi up
    ```
 
 4. **Tag the release** (after successful deploy):
@@ -508,7 +540,7 @@ It automatically detects source file changes by hash and runs `cargo make build`
 
 ```bash
 cd pulumi  # this directory
-npm run up
+pulumi up
 ```
 
 ## Previewing Changes (preview)
@@ -517,7 +549,7 @@ Review which resources will be changed before running `pulumi up`.
 
 ```bash
 cd pulumi  # this directory
-npm run preview
+pulumi preview
 ```
 
 `pulumi preview` makes no changes to AWS and displays the following:

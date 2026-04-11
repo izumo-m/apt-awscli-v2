@@ -1,7 +1,7 @@
 # APT repository for AWS CLI v2 (Unofficial)
 
 APT repository for AWS CLI v2 and Session Manager Plugin.
-When a new version is released to the official AWS distribution, APT packages are automatically generated and published (typically within 1 day).
+When a new version is released to the official AWS distribution, APT packages are automatically generated and published.
 
 **Supported architectures:** amd64, arm64
 
@@ -55,3 +55,7 @@ To also remove the repository configuration:
 sudo rm /etc/apt/sources.list.d/apt-awscli-v2.list
 sudo rm /usr/share/keyrings/apt-awscli-v2.gpg
 ```
+
+---
+
+Source: https://github.com/izumo-m/apt-awscli-v2

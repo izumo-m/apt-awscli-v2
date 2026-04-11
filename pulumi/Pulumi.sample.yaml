@@ -1,8 +1,8 @@
 config:
-  aptAwscliV2:resourcePrefix: your-prefix           # Common prefix for all resource names (e.g., apt-awscli-v2-myname)
   aptAwscliV2:email: user@example.com               # Maintainer email address for APT packages
   aptAwscliV2:maintainerName: Your Name             # Maintainer name for APT packages
   aptAwscliV2:s3Uri: s3://your-apt-bucket/apt/      # S3 URI for APT repository hosting
+  # aptAwscliV2:resourcePrefix: apt-awscli-v2        # Common prefix for all resource names (default: apt-awscli-v2)
   # aws:region: ap-northeast-1                      # Deploy region (defaults to SDK default from AWS_REGION etc.)
   # aptAwscliV2:accessLogsS3Uri: s3://your-apt-bucket-logs/  # S3 URI for access log delivery (disabled if omitted)
   # aptAwscliV2:accessLogRetentionDays: "-1"        # Access log retention days (-1 for indefinite)

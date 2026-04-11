@@ -65,7 +65,7 @@ s3://apt-awscli-v2-dev/apt/
 ## Metadata Templates (`metadata/`)
 
 Files under `metadata/` are embedded into the Lambda binary at compile time via `include_str!`.
-Modifying them changes the source hash, triggering an automatic rebuild and redeploy on `npm run up`.
+Modifying them changes the source hash, triggering an automatic rebuild and redeploy on the next `pulumi up`.
 
 | File | Embedded in | Description |
 |----------|-----------|------|
@@ -147,7 +147,7 @@ Each directory contains the following files:
 | File | Description |
 |----------|------|
 | `bootstrap` | Binary for Lambda custom runtime (musl static link) |
-| `bootstrap.zip` | ZIP-compressed `bootstrap` (used by `npm run up`) |
+| `bootstrap.zip` | ZIP-compressed `bootstrap` (picked up by `pulumi up` as the Lambda archive) |
 
 ## Updating Dependencies
 
@@ -184,11 +184,11 @@ cargo make build
 ### 4. Deploy
 
 After tests pass, deploy from `pulumi/`.
-The `Cargo.lock` change alters the source hash, so `npm run up` automatically triggers a rebuild and redeploy.
+The `Cargo.lock` change alters the source hash, so `pulumi up` automatically triggers a rebuild and redeploy.
 
 ```bash
 cd ../pulumi
-npm run up
+pulumi up
 ```
 
 ## Local Execution
@@ -216,12 +216,12 @@ Source file changes are automatically detected by hash, triggering a Docker buil
 ```bash
 cd ../pulumi
 
-# Build & deploy (arm64)
-npm run up
-
-# For x86_64
-APT_AWSCLI_V2_LAMBDA_ARCH=x86_64 npm run up
+# Build & deploy
+pulumi up
 ```
+
+To switch architectures, set `aptAwscliV2:lambdaArch` in `Pulumi.{stack}.yaml`
+to `arm64` or `x86_64` and re-run `pulumi up`.
 
 ### Manual Invocation
 
