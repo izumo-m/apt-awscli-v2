@@ -2,7 +2,7 @@
 name = "apt-awscli-v2-lambda"
 version = "0.0.0"
 edition = "2021"
-license = "Apache-2.0"
+license = "MIT"
 
 [lib]
 name = "apt_awscli_v2_lambda"
