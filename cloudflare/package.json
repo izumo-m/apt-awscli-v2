@@ -1,0 +1,16 @@
+{
+  "name": "apt-awscli-v2-cloudflare",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Wrangler deploy harness for the apt-awscli-v2-proxy Cloudflare Worker",
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "tail": "wrangler tail",
+    "whoami": "wrangler whoami",
+    "login": "wrangler login"
+  },
+  "devDependencies": {
+    "wrangler": "^4.83.0"
+  }
+}
