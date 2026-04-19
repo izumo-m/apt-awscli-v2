@@ -1,6 +1,8 @@
 use anyhow::{Context, Result};
 use aws_sdk_ssm::Client as SsmClient;
-use pgp::composed::{ArmorOptions, CleartextSignedMessage, Deserializable, SignedPublicKey, SignedSecretKey};
+use pgp::composed::{
+    ArmorOptions, CleartextSignedMessage, Deserializable, SignedPublicKey, SignedSecretKey,
+};
 use pgp::types::Password;
 use tracing::info;
 
@@ -23,8 +25,8 @@ impl Signer {
             .parameter()
             .and_then(|p| p.value())
             .context("SSM parameter has no value")?;
-        let (secret_key, _) = SignedSecretKey::from_string(pem)
-            .context("Failed to parse GPG private key")?;
+        let (secret_key, _) =
+            SignedSecretKey::from_string(pem).context("Failed to parse GPG private key")?;
         Ok(Self { secret_key })
     }
 

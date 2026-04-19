@@ -25,9 +25,7 @@ pub async fn build(config: &Config, version: &str, arch: &str) -> Result<bool> {
     info!("Building awscli-v2 {pkg_version} ({arch})...");
 
     let zip_arch = Config::zip_arch(arch)?;
-    let url = format!(
-        "https://awscli.amazonaws.com/awscli-exe-linux-{zip_arch}-{version}.zip"
-    );
+    let url = format!("https://awscli.amazonaws.com/awscli-exe-linux-{zip_arch}-{version}.zip");
 
     // Download
     info!("Downloading {url}...");
@@ -50,8 +48,7 @@ pub async fn build(config: &Config, version: &str, arch: &str) -> Result<bool> {
     let _ = std::fs::remove_dir_all(&dist_dir);
 
     let cursor = std::io::Cursor::new(&zip_data);
-    let mut archive = zip::ZipArchive::new(cursor)
-        .context("Failed to open zip archive")?;
+    let mut archive = zip::ZipArchive::new(cursor).context("Failed to open zip archive")?;
 
     // Extract aws/dist/* to {dist_dir}/opt/awscli-v2/
     let opt_dir = format!("{dist_dir}/opt/awscli-v2");
@@ -131,16 +128,28 @@ pub async fn build(config: &Config, version: &str, arch: &str) -> Result<bool> {
     }
 
     // Build deb
-    info!("Building deb package (zstd level={}, threads={})...", config.zstd_level, config.zstd_threads);
+    info!(
+        "Building deb package (zstd level={}, threads={})...",
+        config.zstd_level, config.zstd_threads
+    );
     std::fs::create_dir_all(&pool_dir)?;
     let build_start = std::time::Instant::now();
-    deb::build_deb(Path::new(&dist_dir), Path::new(&deb_path), config.zstd_threads, config.zstd_level)?;
+    deb::build_deb(
+        Path::new(&dist_dir),
+        Path::new(&deb_path),
+        config.zstd_threads,
+        config.zstd_level,
+    )?;
     let build_elapsed = build_start.elapsed();
     let deb_size = std::fs::metadata(&deb_path)?.len();
 
     // Clean up staging
     let _ = std::fs::remove_dir_all(&dist_dir);
 
-    info!("Done: {deb_path} ({:.1} MB, {:.1}s)", deb_size as f64 / 1_000_000.0, build_elapsed.as_secs_f64());
+    info!(
+        "Done: {deb_path} ({:.1} MB, {:.1}s)",
+        deb_size as f64 / 1_000_000.0,
+        build_elapsed.as_secs_f64()
+    );
     Ok(true)
 }

@@ -75,7 +75,7 @@ export function loadConfig(): AppConfig {
         lambdaThreads:          config.getNumber("lambdaThreads")       ?? 8,
         lambdaZstdThreads:      config.getNumber("lambdaZstdThreads")   ?? 4,
         lambdaZstdLevel:        config.getNumber("lambdaZstdLevel")     ?? 9,
-        scheduleCron:           config.get("scheduleCron")           ?? "cron(0 0 ? * WED,THU,FRI,SAT,SUN *)",
+        scheduleCron:           config.get("scheduleCron")           ?? "cron(0 0 ? * TUE-SAT *)",
         logRetentionDays:       config.getNumber("logRetentionDays") ?? 14,
         enableScheduler:        config.getBoolean("enableScheduler") ?? true,
         notificationEmail:      config.get("notificationEmail"),

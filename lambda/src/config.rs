@@ -167,7 +167,8 @@ fn opt_env(key: &str) -> Option<String> {
 
 /// Parse an S3 URL (s3://bucket/prefix/) into (bucket, optional prefix)
 fn parse_s3_url(url: &str) -> Result<(String, Option<String>)> {
-    let url = url.strip_prefix("s3://")
+    let url = url
+        .strip_prefix("s3://")
         .context("S3 URL must start with s3://")?;
 
     let (bucket, prefix) = match url.find('/') {
@@ -215,7 +216,10 @@ mod tests {
     #[test]
     fn test_package_from_str() {
         assert_eq!(Package::from_str("aws-cli").unwrap(), Package::AwsCli);
-        assert_eq!(Package::from_str("session-manager-plugin").unwrap(), Package::SessionManagerPlugin);
+        assert_eq!(
+            Package::from_str("session-manager-plugin").unwrap(),
+            Package::SessionManagerPlugin
+        );
         assert!(Package::from_str("unknown").is_err());
         // trim whitespace
         assert_eq!(Package::from_str("  aws-cli  ").unwrap(), Package::AwsCli);
@@ -224,6 +228,9 @@ mod tests {
     #[test]
     fn test_package_file_prefix() {
         assert_eq!(Package::AwsCli.file_prefix(), "awscli-v2");
-        assert_eq!(Package::SessionManagerPlugin.file_prefix(), "session-manager-plugin");
+        assert_eq!(
+            Package::SessionManagerPlugin.file_prefix(),
+            "session-manager-plugin"
+        );
     }
 }

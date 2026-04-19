@@ -256,7 +256,11 @@ config:
     - arm64
 ```
 
-### Changing the Schedule (Daily UTC 0:00)
+### Changing the Schedule
+
+Default: `cron(0 0 ? * TUE-SAT *)` — runs at JST 9:00 on Tue–Sat, to pick up AWS releases from the previous US business day.
+
+To change to daily at UTC 0:00:
 
 ```yaml
 config:
@@ -294,7 +298,7 @@ Format: `cron(minute hour day month day-of-week year)`
 **Configuration examples:**
 
 ```yaml
-# Daily UTC 0:00 (default is Wed–Sun only)
+# Every day at UTC 0:00 (default runs Tue–Sat only)
 aptAwscliV2:scheduleCron: "cron(0 0 ? * * *)"
 
 # Weekdays only, UTC 9:00 (Japan Standard Time 18:00)
@@ -480,7 +484,7 @@ npm run generate-index-html
 | `aptAwscliV2:lambdaThreads` | | `8` | S3 sync / parallel processing thread count |
 | `aptAwscliV2:lambdaZstdThreads` | | `4` | zstd compression thread count |
 | `aptAwscliV2:lambdaZstdLevel` | | `9` | zstd compression level (1–22) |
-| `aptAwscliV2:scheduleCron` | | `cron(0 0 ? * WED,THU,FRI,SAT,SUN *)` | EventBridge schedule expression |
+| `aptAwscliV2:scheduleCron` | | `cron(0 0 ? * TUE-SAT *)` | EventBridge schedule expression |
 | `aptAwscliV2:logRetentionDays` | | `14` | CloudWatch Logs retention days |
 | `aptAwscliV2:enableScheduler` | | `true` | Set to `false` to skip EventBridge Scheduler creation |
 | `aptAwscliV2:notificationEmail` | | Disabled | Email for Lambda failure notifications. Creates SNS + CloudWatch Alarm when set |

@@ -27,8 +27,7 @@ pub async fn deploy_all(
     if !Path::new(&public_key_path).exists() {
         info!("public.key not found, extracting from private key...");
         let public_key = signer.public_key_armored()?;
-        std::fs::write(&public_key_path, public_key)
-            .context("Failed to write public.key")?;
+        std::fs::write(&public_key_path, public_key).context("Failed to write public.key")?;
         info!("public.key written to {public_key_path}");
     }
 
@@ -56,7 +55,8 @@ pub async fn deploy_all(
         let stable_dists_dir = config.dists_dir("stable");
         std::fs::create_dir_all(&stable_dists_dir)?;
 
-        let pool_entries: Vec<(&str, &str)> = pool_dirs.iter()
+        let pool_entries: Vec<(&str, &str)> = pool_dirs
+            .iter()
             .map(|(d, r)| (d.as_str(), r.as_str()))
             .collect();
 
@@ -69,7 +69,8 @@ pub async fn deploy_all(
         }
 
         // Use the most recent release date across all packages
-        let stable_date = packages_with_dates.iter()
+        let stable_date = packages_with_dates
+            .iter()
             .map(|(_, _, date)| *date)
             .max()
             .unwrap_or_else(Utc::now);
@@ -157,8 +158,7 @@ fn prune_old_versions(pool_dir: &str, arch: &str, max_versions: usize) -> Result
     for deb_name in debs.iter().take(to_remove) {
         let path = format!("{pool_dir}/{deb_name}");
         info!("Removing old version: {deb_name}");
-        std::fs::remove_file(&path)
-            .with_context(|| format!("Failed to remove {path}"))?;
+        std::fs::remove_file(&path).with_context(|| format!("Failed to remove {path}"))?;
     }
 
     Ok(())
@@ -211,11 +211,14 @@ mod tests {
             "awscli-v2_2.15.2-1_amd64.deb".to_string(),
         ];
         debs.sort_by(|a, b| version_sort_key(a).cmp(&version_sort_key(b)));
-        assert_eq!(debs, vec![
-            "awscli-v2_2.9.1-1_amd64.deb",
-            "awscli-v2_2.15.2-1_amd64.deb",
-            "awscli-v2_2.15.30-1_amd64.deb",
-        ]);
+        assert_eq!(
+            debs,
+            vec![
+                "awscli-v2_2.9.1-1_amd64.deb",
+                "awscli-v2_2.15.2-1_amd64.deb",
+                "awscli-v2_2.15.30-1_amd64.deb",
+            ]
+        );
     }
 
     #[test]

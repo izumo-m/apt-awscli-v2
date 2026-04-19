@@ -13,7 +13,10 @@ MUSL_TARGET      = { script = ["if [ \"${LAMBDA_ARCH}\" = \"arm64\" ]; then echo
 description = "Build Docker image for cross-compilation"
 script = '''
 MUSL_TAG=$(echo "$MUSL_TARGET" | sed 's/-unknown-linux//')
-docker build --build-arg MUSL_TAG=$MUSL_TAG -t "$DOCKER_IMAGE-$LAMBDA_ARCH" .
+docker build \
+  --build-arg MUSL_TAG=$MUSL_TAG \
+  --build-arg MUSL_TARGET=$MUSL_TARGET \
+  -t "$DOCKER_IMAGE-$LAMBDA_ARCH" .
 '''
 
 [tasks.build]
