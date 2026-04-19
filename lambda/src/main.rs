@@ -4,8 +4,8 @@ use std::path::Path;
 
 use anyhow::Result;
 use apt_awscli_v2_lambda::{builder, config, deploy, s3_sync, smp_builder, version};
-use config::Package;
 use chrono::Utc;
+use config::Package;
 use lambda_runtime::{service_fn, Error, LambdaEvent, Runtime};
 use tracing::{info, Instrument};
 
@@ -18,18 +18,14 @@ async fn main() -> Result<(), Error> {
     Ok(())
 }
 
-async fn handler(
-    event: LambdaEvent<serde_json::Value>,
-) -> Result<serde_json::Value, Error> {
+async fn handler(event: LambdaEvent<serde_json::Value>) -> Result<serde_json::Value, Error> {
     let id = &event.context.request_id;
     let short_id = &id[..id.len().min(8)];
     let span = tracing::info_span!("", req = short_id);
     handler_inner(event).instrument(span).await
 }
 
-async fn handler_inner(
-    event: LambdaEvent<serde_json::Value>,
-) -> Result<serde_json::Value, Error> {
+async fn handler_inner(event: LambdaEvent<serde_json::Value>) -> Result<serde_json::Value, Error> {
     info!("Lambda handler started");
 
     let force_deploy = event
@@ -44,23 +40,30 @@ async fn handler_inner(
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
     if fail_for_test {
-        return Err(anyhow::anyhow!("intentional failure for notification test (fail_for_test=true)").into());
+        return Err(anyhow::anyhow!(
+            "intentional failure for notification test (fail_for_test=true)"
+        )
+        .into());
     }
 
     // 1. Load config
     let config = config::Config::from_env()?;
     info!(
         "Config: archs={:?}, bucket={}, prefix={:?}, packages={:?}",
-        config.archs, config.s3_bucket, config.s3_prefix,
-        config.packages.iter().map(|p| p.file_prefix()).collect::<Vec<_>>(),
+        config.archs,
+        config.s3_bucket,
+        config.s3_prefix,
+        config
+            .packages
+            .iter()
+            .map(|p| p.file_prefix())
+            .collect::<Vec<_>>(),
     );
 
     // 2. Set up AWS SDK clients
     let aws_config = aws_config::load_defaults(aws_config::BehaviorVersion::latest()).await;
     let s3_config = aws_sdk_s3::config::Builder::from(&aws_config)
-        .stalled_stream_protection(
-            aws_sdk_s3::config::StalledStreamProtectionConfig::disabled(),
-        )
+        .stalled_stream_protection(aws_sdk_s3::config::StalledStreamProtectionConfig::disabled())
         .build();
     let s3_client = aws_sdk_s3::Client::from_conf(s3_config);
     let ssm_client = aws_sdk_ssm::Client::new(&aws_config);
@@ -82,7 +85,8 @@ async fn handler_inner(
         .await?;
 
         let release_date = Utc::now();
-        let packages_with_dates: Vec<(Package, String, _)> = config.packages
+        let packages_with_dates: Vec<(Package, String, _)> = config
+            .packages
             .iter()
             .map(|p| (p.clone(), String::new(), release_date))
             .collect();
@@ -98,8 +102,8 @@ async fn handler_inner(
     // 4. Sync S3 -> local  &  fetch all package versions in parallel
     info!("Syncing S3 -> {repo_dir} and fetching latest versions in parallel...");
 
-    let has_awscli      = config.packages.contains(&Package::AwsCli);
-    let has_smp         = config.packages.contains(&Package::SessionManagerPlugin);
+    let has_awscli = config.packages.contains(&Package::AwsCli);
+    let has_smp = config.packages.contains(&Package::SessionManagerPlugin);
 
     let (sync_result, awscli_result, smp_result) = tokio::join!(
         s3_sync::download(
@@ -110,10 +114,18 @@ async fn handler_inner(
             config.threads,
         ),
         async {
-            if has_awscli { Some(version::fetch_latest_version().await) } else { None }
+            if has_awscli {
+                Some(version::fetch_latest_version().await)
+            } else {
+                None
+            }
         },
         async {
-            if has_smp { Some(version::fetch_session_manager_plugin_version().await) } else { None }
+            if has_smp {
+                Some(version::fetch_session_manager_plugin_version().await)
+            } else {
+                None
+            }
         },
     );
     sync_result?;
@@ -137,7 +149,9 @@ async fn handler_inner(
 
     if let Some(result) = smp_result {
         let (latest_version, released_at) = result?;
-        info!("Session Manager Plugin latest version: {latest_version}, released at: {released_at}");
+        info!(
+            "Session Manager Plugin latest version: {latest_version}, released at: {released_at}"
+        );
 
         for arch in &config.archs {
             let built = smp_builder::build(&config, &latest_version, arch).await?;

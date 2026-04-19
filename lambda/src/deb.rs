@@ -51,9 +51,18 @@ pub fn build_deb(staging_dir: &Path, output_path: &Path, threads: u32, level: i3
         .with_context(|| format!("Failed to create {}", output_path.display()))?;
     let mut archive = ar::Builder::new(output_file);
 
-    archive.append(&ar_header(b"debian-binary",   debian_binary.len()   as u64), &debian_binary[..])?;
-    archive.append(&ar_header(b"control.tar.zst", control_tar_zst.len() as u64), control_tar_zst.as_slice())?;
-    archive.append(&ar_header(b"data.tar.zst",    data_tar_zst.len()    as u64), data_tar_zst.as_slice())?;
+    archive.append(
+        &ar_header(b"debian-binary", debian_binary.len() as u64),
+        &debian_binary[..],
+    )?;
+    archive.append(
+        &ar_header(b"control.tar.zst", control_tar_zst.len() as u64),
+        control_tar_zst.as_slice(),
+    )?;
+    archive.append(
+        &ar_header(b"data.tar.zst", data_tar_zst.len() as u64),
+        data_tar_zst.as_slice(),
+    )?;
 
     Ok(())
 }
@@ -73,9 +82,7 @@ fn add_dir_to_tar<W: Write>(
     base: &Path,
     exclude: Option<&str>,
 ) -> Result<()> {
-    let mut entries: Vec<_> = std::fs::read_dir(dir)?
-        .filter_map(|e| e.ok())
-        .collect();
+    let mut entries: Vec<_> = std::fs::read_dir(dir)?.filter_map(|e| e.ok()).collect();
     entries.sort_by_key(|e| e.file_name());
 
     for entry in entries {
@@ -125,7 +132,11 @@ fn add_dir_to_tar<W: Write>(
             let mut header = tar::Header::new_gnu();
             header.set_entry_type(tar::EntryType::Regular);
             let metadata = std::fs::metadata(&path)?;
-            let mode = if is_executable(&metadata) { 0o755 } else { 0o644 };
+            let mode = if is_executable(&metadata) {
+                0o755
+            } else {
+                0o644
+            };
             header.set_mode(mode);
             header.set_uid(0);
             header.set_gid(0);
@@ -138,7 +149,6 @@ fn add_dir_to_tar<W: Write>(
 
     Ok(())
 }
-
 
 #[cfg(unix)]
 fn is_executable(metadata: &std::fs::Metadata) -> bool {

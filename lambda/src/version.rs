@@ -180,9 +180,7 @@ mod tests {
         // so 2.x should not pick it up. But 2.x has no datetime of its own,
         // so only 1.x's datetime resets the candidate.
         let now = Utc::now();
-        let html = awscli_html(&[
-            ("1.44.39", now - Duration::hours(72)),
-        ]);
+        let html = awscli_html(&[("1.44.39", now - Duration::hours(72))]);
         let result = parse_latest_version(&html);
         assert!(result.is_err(), "Should not return 1.x version");
     }

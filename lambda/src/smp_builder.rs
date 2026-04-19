@@ -36,8 +36,7 @@ pub async fn build(config: &Config, version: &str, arch: &str) -> Result<bool> {
         .with_context(|| format!("Failed to read response body from {url}"))?;
 
     std::fs::create_dir_all(&pool_dir)?;
-    std::fs::write(&deb_path, &deb_data)
-        .with_context(|| format!("Failed to write {deb_path}"))?;
+    std::fs::write(&deb_path, &deb_data).with_context(|| format!("Failed to write {deb_path}"))?;
 
     let deb_size = deb_data.len();
     info!("Done: {deb_path} ({:.1} MB)", deb_size as f64 / 1_000_000.0);
@@ -48,7 +47,10 @@ fn smp_download_url(version: &str, arch: &str) -> Result<String> {
     let url_arch = match arch {
         "amd64" => "ubuntu_64bit",
         "arm64" => "ubuntu_arm64",
-        other => anyhow::bail!("Unsupported architecture for Session Manager Plugin: {}", other),
+        other => anyhow::bail!(
+            "Unsupported architecture for Session Manager Plugin: {}",
+            other
+        ),
     };
     Ok(format!(
         "https://s3.amazonaws.com/session-manager-downloads/plugin/{version}/{url_arch}/session-manager-plugin.deb"

@@ -11,7 +11,11 @@ use tracing::info;
 
 /// Generate Packages and Packages.gz combining one or more per-package pool directories.
 /// Reuses cached Packages entries where possible (matched by Filename + Size).
-pub fn generate_packages(pool_entries: &[(&str, &str)], binary_arch_dir: &str, arch: &str) -> Result<String> {
+pub fn generate_packages(
+    pool_entries: &[(&str, &str)],
+    binary_arch_dir: &str,
+    arch: &str,
+) -> Result<String> {
     let suffix = format!("_{arch}.deb");
 
     // Parse existing Packages file to reuse cached entries
@@ -149,8 +153,7 @@ fn compute_hashes(data: &[u8]) -> (String, String, String) {
 
 /// Scan a .deb file to extract control metadata and compute hashes.
 fn scan_deb(deb_path: &str, file_size: u64) -> Result<DebMetadata> {
-    let deb_data = std::fs::read(deb_path)
-        .with_context(|| format!("Failed to read {deb_path}"))?;
+    let deb_data = std::fs::read(deb_path).with_context(|| format!("Failed to read {deb_path}"))?;
 
     // Compute hashes of the whole deb (in parallel)
     let (md5, sha1, sha256) = compute_hashes(&deb_data);
@@ -178,7 +181,8 @@ fn extract_control_from_deb(deb_data: &[u8]) -> Result<String> {
         let mut entry = entry?;
         let name = std::str::from_utf8(entry.header().identifier())?.to_string();
 
-        let tar_data: Vec<u8> = if name == "control.tar.zst" || name.starts_with("control.tar.zst/") {
+        let tar_data: Vec<u8> = if name == "control.tar.zst" || name.starts_with("control.tar.zst/")
+        {
             let mut compressed = Vec::new();
             entry.read_to_end(&mut compressed)?;
             zstd::decode_all(compressed.as_slice())
@@ -286,7 +290,10 @@ mod tests {
     #[test]
     fn test_extract_field() {
         let block = "Package: awscli-v2\nVersion: 2.15.30-1\nFilename: pool/main/awscli-v2_2.15.30-1_amd64.deb\nSize: 12345";
-        assert_eq!(extract_field(block, "Filename"), Some("pool/main/awscli-v2_2.15.30-1_amd64.deb".to_string()));
+        assert_eq!(
+            extract_field(block, "Filename"),
+            Some("pool/main/awscli-v2_2.15.30-1_amd64.deb".to_string())
+        );
         assert_eq!(extract_field(block, "Size"), Some("12345".to_string()));
         assert_eq!(extract_field(block, "NonExistent"), None);
     }
@@ -304,7 +311,14 @@ mod tests {
 
         let archs = vec!["amd64".to_string()];
         let date = chrono::Utc::now();
-        generate_release(dists_dir, &archs, date, "awscli-v2", "AWS CLI v2 APT Repository (Unofficial)").unwrap();
+        generate_release(
+            dists_dir,
+            &archs,
+            date,
+            "awscli-v2",
+            "AWS CLI v2 APT Repository (Unofficial)",
+        )
+        .unwrap();
 
         let release = std::fs::read_to_string(format!("{dists_dir}/Release")).unwrap();
         assert!(release.contains("Codename: awscli-v2"));

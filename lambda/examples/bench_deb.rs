@@ -50,7 +50,11 @@ fn main() -> Result<()> {
 
     let size = std::fs::metadata(&output_path)?.len();
     eprintln!("Output: {output_path}");
-    eprintln!("Size:   {} bytes ({:.2} MB)", size, size as f64 / 1_048_576.0);
+    eprintln!(
+        "Size:   {} bytes ({:.2} MB)",
+        size,
+        size as f64 / 1_048_576.0
+    );
     eprintln!("Time:   {:.3}s", elapsed.as_secs_f64());
 
     Ok(())
@@ -63,7 +67,8 @@ fn prepare_dist(dist_dir: &str, arch: &str) -> Result<()> {
         _ => {
             eprintln!("Fetching latest version ...");
             let rt = tokio::runtime::Runtime::new()?;
-            rt.block_on(apt_awscli_v2_lambda::version::fetch_latest_version())?.0
+            rt.block_on(apt_awscli_v2_lambda::version::fetch_latest_version())?
+                .0
         }
     };
 
@@ -72,9 +77,7 @@ fn prepare_dist(dist_dir: &str, arch: &str) -> Result<()> {
         "arm64" => "aarch64",
         other => anyhow::bail!("Unsupported architecture: {other}"),
     };
-    let url = format!(
-        "https://awscli.amazonaws.com/awscli-exe-linux-{zip_arch}-{version}.zip"
-    );
+    let url = format!("https://awscli.amazonaws.com/awscli-exe-linux-{zip_arch}-{version}.zip");
 
     // Download
     eprintln!("Downloading {url} ...");
@@ -82,7 +85,11 @@ fn prepare_dist(dist_dir: &str, arch: &str) -> Result<()> {
         .with_context(|| format!("Failed to download {url}"))?
         .bytes()
         .with_context(|| format!("Failed to read response from {url}"))?;
-    eprintln!("Downloaded {} bytes ({:.2} MB)", zip_data.len(), zip_data.len() as f64 / 1_048_576.0);
+    eprintln!(
+        "Downloaded {} bytes ({:.2} MB)",
+        zip_data.len(),
+        zip_data.len() as f64 / 1_048_576.0
+    );
 
     // Extract
     eprintln!("Extracting ...");

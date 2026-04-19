@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use anyhow::{Context, Result};
-use aws_sdk_s3::Client;
 use aws_sdk_s3::primitives::{ByteStream, DateTime};
+use aws_sdk_s3::Client;
 use futures::stream::{self, StreamExt};
 use glob::Pattern;
 use tracing::info;
@@ -75,7 +75,11 @@ pub async fn download(
                 }
             };
             if should_download {
-                Some((key.clone(), local_dir.join(&relative), remote.last_modified.clone()))
+                Some((
+                    key.clone(),
+                    local_dir.join(&relative),
+                    remote.last_modified.clone(),
+                ))
             } else {
                 None
             }
@@ -95,7 +99,10 @@ pub async fn download(
             let client = client.clone();
             let bucket = bucket.to_string();
             async move {
-                info!("Downloading s3://{bucket}/{key} -> {}", local_path.display());
+                info!(
+                    "Downloading s3://{bucket}/{key} -> {}",
+                    local_path.display()
+                );
                 let resp = client
                     .get_object()
                     .bucket(&bucket)
@@ -195,11 +202,7 @@ pub async fn upload(
                     .await
                     .with_context(|| format!("Failed to read {}", local_path.display()))?;
                 let body = ByteStream::from(data);
-                let mut req = client
-                    .put_object()
-                    .bucket(&bucket)
-                    .key(&key)
-                    .body(body);
+                let mut req = client.put_object().bucket(&bucket).key(&key).body(body);
                 if let Some(cc) = cache_control {
                     req = req.cache_control(cc);
                 }
@@ -221,10 +224,8 @@ pub async fn upload(
     }
 
     // Delete S3 objects that don't exist locally
-    let local_keys: std::collections::HashSet<String> = local_files
-        .keys()
-        .map(|r| make_key(r, prefix))
-        .collect();
+    let local_keys: std::collections::HashSet<String> =
+        local_files.keys().map(|r| make_key(r, prefix)).collect();
 
     let to_delete: Vec<_> = remote_objects
         .keys()
@@ -284,9 +285,7 @@ async fn list_objects(
     let mut continuation_token: Option<String> = None;
 
     loop {
-        let mut req = client
-            .list_objects_v2()
-            .bucket(bucket);
+        let mut req = client.list_objects_v2().bucket(bucket);
 
         if let Some(p) = prefix {
             req = req.prefix(format!("{p}/"));
@@ -296,8 +295,7 @@ async fn list_objects(
             req = req.continuation_token(token);
         }
 
-        let resp = req.send().await
-            .context("Failed to list S3 objects")?;
+        let resp = req.send().await.context("Failed to list S3 objects")?;
 
         for obj in resp.contents() {
             if let (Some(key), Some(size), Some(last_modified)) =
