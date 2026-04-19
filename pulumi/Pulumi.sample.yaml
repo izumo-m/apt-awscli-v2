@@ -21,7 +21,7 @@ config:
   # aptAwscliV2:lambdaThreads: "8"                  # S3 sync parallel thread count
   # aptAwscliV2:lambdaZstdThreads: "4"              # zstd compression thread count
   # aptAwscliV2:lambdaZstdLevel: "9"                # zstd compression level (1-22)
-  # aptAwscliV2:scheduleCron: "cron(0 0 ? * WED,THU,FRI,SAT,SUN *)"  # Auto-execution schedule (EventBridge cron expression)
+  # aptAwscliV2:scheduleCron: "cron(0 0 ? * TUE-SAT *)"  # Auto-execution schedule (default: JST 9:00 Tue-Sat, to pick up AWS releases from the previous US business day)
   # aptAwscliV2:logRetentionDays: "30"              # CloudWatch log retention days for Lambda
   # aptAwscliV2:enableScheduler: "true"             # Set to false to skip EventBridge Scheduler creation
   # aptAwscliV2:notificationEmail: alert@example.com  # Email notification on Lambda failure (creates SNS + CloudWatch Alarm)
