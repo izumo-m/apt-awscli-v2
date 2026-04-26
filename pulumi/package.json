@@ -13,7 +13,10 @@
     "stack:ls": "pulumi stack ls",
     "config": "pulumi config",
     "confirm-subscription": "ts-node scripts/confirm-subscription.ts",
-    "generate-index-html": "ts-node scripts/generate-index-html.ts"
+    "generate-index-html": "ts-node scripts/generate-index-html.ts",
+    "cf-config:set": "ts-node scripts/cf-config.ts set",
+    "cf-config:show": "ts-node scripts/cf-config.ts show",
+    "cf-purge": "ts-node scripts/cf-purge.ts"
   },
   "dependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.1037.0",
@@ -22,6 +25,7 @@
     "@aws-sdk/client-sns": "^3.1037.0",
     "@aws-sdk/client-ssm": "^3.1037.0",
     "@pulumi/aws": "^7.27.0",
+    "@pulumi/cloudflare": "^6.14.0",
     "@pulumi/pulumi": "^3.232.0",
     "js-yaml": "^4.1.1",
     "marked": "^18.0.2",

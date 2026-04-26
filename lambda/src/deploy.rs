@@ -108,16 +108,18 @@ pub async fn deploy_all(
                 content_type: None,
             },
         },
-        // Do not cache metadata files (prevent hash mismatch)
+        // Index/metadata files: cache at the edge for 1 day. Cloudflare cache
+        // is invalidated immediately after upload via cloudflare::CloudflarePurger,
+        // so this max-age only acts as a safety-net TTL when purge fails.
         s3_sync::MetadataRule {
             pattern: "dists/**".to_string(),
             metadata: s3_sync::ObjectMetadata {
-                cache_control: Some("no-store".to_string()),
+                cache_control: Some("public, max-age=86400".to_string()),
                 content_type: None,
             },
         },
     ];
-    s3_sync::upload(
+    let upload_result = s3_sync::upload(
         s3_client,
         &config.s3_bucket,
         config.s3_prefix.as_deref(),
@@ -126,6 +128,33 @@ pub async fn deploy_all(
         &metadata_rules,
     )
     .await?;
+
+    // Invalidate Cloudflare edge cache for all created/updated/deleted keys.
+    // If APT_AWSCLI_V2_CF_SSM_PARAM is unset, this branch is skipped entirely.
+    // Failures propagate up and fail the Lambda invocation, surfacing through
+    // the existing SNS alarm so an operator is notified.
+    if let Some(param) = config.cf_ssm_param.as_deref() {
+        let zone_id = config.cf_zone_id.clone().context(
+            "APT_AWSCLI_V2_CF_ZONE_ID must be set when APT_AWSCLI_V2_CF_SSM_PARAM is set",
+        )?;
+        let public_base_url = config.cf_public_base_url.clone().context(
+            "APT_AWSCLI_V2_CF_PUBLIC_BASE_URL must be set when APT_AWSCLI_V2_CF_SSM_PARAM is set",
+        )?;
+        let purger = crate::cloudflare::CloudflarePurger::from_ssm(
+            ssm_client,
+            param,
+            zone_id,
+            public_base_url,
+        )
+        .await?;
+        let mut keys = upload_result.uploaded;
+        keys.extend(upload_result.deleted);
+        if !keys.is_empty() {
+            purger
+                .purge_keys(&keys, config.s3_prefix.as_deref())
+                .await?;
+        }
+    }
 
     info!("Deploy complete.");
     Ok(())

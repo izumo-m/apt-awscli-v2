@@ -4,3 +4,7 @@ node_modules/
 /pulumi.out/
 /Pulumi.*.yaml
 !/Pulumi.sample.yaml
+# Local Cloudflare credentials staged for `npm run cf-config:set`.
+# Do NOT commit; the canonical copy lives in SSM SecureString.
+cloudflare.json
+cloudflare.*.json

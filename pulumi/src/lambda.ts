@@ -1,7 +1,7 @@
 import * as path from "path";
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
-import { AppConfig } from "./config";
+import { AppConfig, resolvePublicBaseUrl } from "./config";
 import { watchedFiles, computeSourceHash } from "./lambdaSource";
 import { checkAndBuild } from "./check-and-build";
 
@@ -59,6 +59,20 @@ export function createLambda(
         APT_AWSCLI_V2_ZSTD_THREADS: String(cfg.lambdaZstdThreads),
         APT_AWSCLI_V2_ZSTD_LEVEL:   String(cfg.lambdaZstdLevel),
     };
+
+    // Cloudflare integration: only the SSM parameter name and non-secret
+    // identifiers are passed to the Lambda. The API token itself stays in
+    // SSM SecureString and is never written to Pulumi state.
+    if (cfg.cloudflareEnabled) {
+        const publicBaseUrl = resolvePublicBaseUrl(cfg);
+        if (!cfg.cloudflareSsmParam || !cfg.cloudflareZoneId || !publicBaseUrl) {
+            // Should be impossible after loadConfig validation; guard anyway.
+            throw new Error("cloudflareEnabled=true but required fields are missing");
+        }
+        lambdaEnvVars.APT_AWSCLI_V2_CF_SSM_PARAM       = cfg.cloudflareSsmParam;
+        lambdaEnvVars.APT_AWSCLI_V2_CF_ZONE_ID         = cfg.cloudflareZoneId;
+        lambdaEnvVars.APT_AWSCLI_V2_CF_PUBLIC_BASE_URL = publicBaseUrl;
+    }
 
     // ─── Lambda Function ──────────────────────────────────────────────────────
     // sourceHash includes lambdaArch, so changing architecture also changes the archive path.

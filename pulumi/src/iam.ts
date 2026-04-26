@@ -50,8 +50,18 @@ export function createLambdaIam(cfg: AppConfig): LambdaIamResult {
     const region    = aws.getRegionOutput().name;
     const accountId = aws.getCallerIdentityOutput().accountId;
 
-    const policy = pulumi.all([region, accountId]).apply(([r, acct]) =>
-        JSON.stringify({
+    const policy = pulumi.all([region, accountId]).apply(([r, acct]) => {
+        // SSM parameters the Lambda may read. Cloudflare credentials are added
+        // only when configured, so deployments without Cloudflare integration
+        // get no extra permissions.
+        const ssmParameterArns: string[] = [
+            `arn:aws:ssm:${r}:${acct}:parameter${cfg.ssmParamName}`,
+        ];
+        if (cfg.cloudflareSsmParam) {
+            ssmParameterArns.push(`arn:aws:ssm:${r}:${acct}:parameter${cfg.cloudflareSsmParam}`);
+        }
+
+        return JSON.stringify({
             Version: "2012-10-17",
             Statement: [
                 {
@@ -67,7 +77,7 @@ export function createLambdaIam(cfg: AppConfig): LambdaIamResult {
                 {
                     Effect: "Allow",
                     Action: "ssm:GetParameter",
-                    Resource: `arn:aws:ssm:${r}:${acct}:parameter${cfg.ssmParamName}`,
+                    Resource: ssmParameterArns,
                 },
                 {
                     Effect: "Allow",
@@ -83,8 +93,8 @@ export function createLambdaIam(cfg: AppConfig): LambdaIamResult {
                     Resource: `arn:aws:logs:${r}:${acct}:log-group:${logGroupName}:*`,
                 },
             ],
-        })
-    );
+        });
+    });
 
     const lambdaRolePolicy = new aws.iam.RolePolicy(policyName, {
         name: policyName,

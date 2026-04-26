@@ -2,15 +2,10 @@ name = "apt-awscli-v2-proxy"
 main = "index.js"
 compatibility_date = "2026-04-19"
 
-# account_id is intentionally not committed. Provide it via the
-# CLOUDFLARE_ACCOUNT_ID environment variable so this config stays reusable.
-
-# Custom domain (apt-awscli-v2.masanao.site) is managed from the Cloudflare
-# dashboard. Do not advertise *.workers.dev.
-workers_dev = false
-
-# Preserve plain-text vars and secrets configured in the dashboard.
-# Without this, `wrangler deploy` replaces dashboard-managed vars with what is
-# defined in this file. Secrets are always preserved regardless.
-keep_vars = true
+# This file exists only for `wrangler dev` and `wrangler tail` against the
+# locally-checked-out Worker source. Production deployment is managed by
+# Pulumi (see ../pulumi/src/cloudflare.ts) — do NOT run `wrangler deploy`
+# from this directory.
+#
+# For `wrangler dev`, set ORIGIN_BASE_URL in cloudflare/.dev.vars (gitignored).
 

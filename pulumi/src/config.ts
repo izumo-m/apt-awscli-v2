@@ -51,6 +51,22 @@ export interface AppConfig {
     logRetentionDays:       number;
     enableScheduler:        boolean;
     notificationEmail:      string | undefined;
+    // ─── Cloudflare integration (opt-in) ──────────────────────────────────
+    // Master switch. When false (default), no Cloudflare resources are
+    // created and Lambda skips cache invalidation.
+    cloudflareEnabled:        boolean;
+    // Required when cloudflareEnabled is true.
+    cloudflareAccountId:      string | undefined;
+    cloudflareZoneId:         string | undefined;
+    // SSM SecureString parameter holding `{"api_token":"..."}` for Lambda
+    // runtime cache purge. Required when cloudflareEnabled is true.
+    cloudflareSsmParam:       string | undefined;
+    // Opt-in: when set, Pulumi creates a WorkersCustomDomain so the Worker
+    // is reachable at https://<this-host>.
+    cloudflareCustomDomain:   string | undefined;
+    // Opt-in override for the public base URL Lambda uses to construct
+    // purge URLs. If unset, derived as `https://${cloudflareCustomDomain}`.
+    cloudflarePublicBaseUrl:  string | undefined;
 }
 
 export function loadConfig(): AppConfig {
@@ -79,5 +95,79 @@ export function loadConfig(): AppConfig {
         logRetentionDays:       config.getNumber("logRetentionDays") ?? 14,
         enableScheduler:        config.getBoolean("enableScheduler") ?? true,
         notificationEmail:      config.get("notificationEmail"),
+        ...loadCloudflareConfig(config),
     };
+}
+
+interface CloudflareConfig {
+    cloudflareEnabled:        boolean;
+    cloudflareAccountId:      string | undefined;
+    cloudflareZoneId:         string | undefined;
+    cloudflareSsmParam:       string | undefined;
+    cloudflareCustomDomain:   string | undefined;
+    cloudflarePublicBaseUrl:  string | undefined;
+}
+
+function loadCloudflareConfig(config: pulumi.Config): CloudflareConfig {
+    const enabled         = config.getBoolean("cloudflareEnabled") ?? false;
+    const accountId       = config.get("cloudflareAccountId");
+    const zoneId          = config.get("cloudflareZoneId");
+    const ssmParam        = config.get("cloudflareSsmParam");
+    const customDomain    = config.get("cloudflareCustomDomain");
+    const publicBaseUrl   = config.get("cloudflarePublicBaseUrl");
+
+    if (!enabled) {
+        // Cloudflare disabled: warn if any Cloudflare-specific keys are set.
+        const stray = [
+            accountId      ? "cloudflareAccountId"     : "",
+            zoneId         ? "cloudflareZoneId"        : "",
+            ssmParam       ? "cloudflareSsmParam"      : "",
+            customDomain   ? "cloudflareCustomDomain"  : "",
+            publicBaseUrl  ? "cloudflarePublicBaseUrl" : "",
+        ].filter(s => s.length > 0);
+        if (stray.length > 0) {
+            pulumi.log.warn(
+                `Cloudflare config keys are set but cloudflareEnabled is false; ignoring: ${stray.join(", ")}`,
+            );
+        }
+        return {
+            cloudflareEnabled:       false,
+            cloudflareAccountId:     undefined,
+            cloudflareZoneId:        undefined,
+            cloudflareSsmParam:      undefined,
+            cloudflareCustomDomain:  undefined,
+            cloudflarePublicBaseUrl: undefined,
+        };
+    }
+
+    // Cloudflare enabled: enforce required fields.
+    if (!accountId) throw new Error("cloudflareEnabled=true requires aptAwscliV2:cloudflareAccountId");
+    if (!zoneId)    throw new Error("cloudflareEnabled=true requires aptAwscliV2:cloudflareZoneId");
+    if (!ssmParam)  throw new Error("cloudflareEnabled=true requires aptAwscliV2:cloudflareSsmParam");
+
+    // Lambda needs a public base URL to construct purge URLs.
+    // Provide either an explicit publicBaseUrl, or a customDomain to derive from.
+    if (!publicBaseUrl && !customDomain) {
+        throw new Error(
+            "cloudflareEnabled=true requires either aptAwscliV2:cloudflareCustomDomain " +
+            "or aptAwscliV2:cloudflarePublicBaseUrl so the Lambda knows which URLs to purge",
+        );
+    }
+
+    return {
+        cloudflareEnabled:       true,
+        cloudflareAccountId:     accountId,
+        cloudflareZoneId:        zoneId,
+        cloudflareSsmParam:      ssmParam,
+        cloudflareCustomDomain:  customDomain,
+        cloudflarePublicBaseUrl: publicBaseUrl,
+    };
+}
+
+/** Resolve the public base URL Lambda will use to build purge URLs. */
+export function resolvePublicBaseUrl(cfg: AppConfig): string | undefined {
+    if (!cfg.cloudflareEnabled) return undefined;
+    if (cfg.cloudflarePublicBaseUrl) return cfg.cloudflarePublicBaseUrl.replace(/\/+$/, "");
+    if (cfg.cloudflareCustomDomain)  return `https://${cfg.cloudflareCustomDomain}`;
+    return undefined;
 }

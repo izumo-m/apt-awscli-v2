@@ -1,0 +1,6 @@
+# Local-only Worker variables for `wrangler dev`.
+# Copy this file to `.dev.vars` (gitignored) and set your own values.
+#
+# In production, ORIGIN_BASE_URL is bound by Pulumi from aptAwscliV2:s3Uri
+# (see ../pulumi/src/cloudflare.ts).
+ORIGIN_BASE_URL=https://your-bucket.s3.amazonaws.com/apt

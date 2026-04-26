@@ -1,93 +1,73 @@
-# Cloudflare Worker — Wrangler Deploy Harness
+# Cloudflare Worker — Source and Local Dev
 
-Deploy the `apt-awscli-v2-proxy` Cloudflare Worker from this directory using Wrangler.
+This directory contains the Worker script source (`index.js`) and a minimal
+Wrangler harness for **local development and live log inspection only**.
 
-`index.js` in this directory is the source of truth. Run `npm run deploy` to upload it to Cloudflare.
+## Production deployment is managed by Pulumi
 
-## Scope
+The Worker is deployed by `pulumi up` from `../pulumi/`, which uploads
+`index.js` as the `apt-awscli-v2-proxy` Worker and binds `ORIGIN_BASE_URL`
+from `aptAwscliV2:s3Uri`. **Do not run `wrangler deploy` from this
+directory** — it is intentionally not exposed in `package.json`.
 
-- **Code only.** This harness uploads the Worker script.
-- **Not managed here:** custom domain (`apt-awscli-v2.masanao.site`), routes, plain-text vars, and secrets. They are configured in the Cloudflare dashboard and intentionally left out of `wrangler.toml` so `wrangler deploy` does not overwrite them.
+See [`../pulumi/README.md`](../pulumi/README.md) §Cloudflare Operations for
+deployment, custom domain setup, token permissions, and cache purge.
 
-## Prerequisites
+## Files
 
-- Node.js 18 or later
-- A Cloudflare account that owns the `apt-awscli-v2-proxy` Worker
-- One of:
-  - Interactive: run `npm run login` (browser OAuth), **or**
-  - CI / non-interactive: `CLOUDFLARE_API_TOKEN` with the `Edit Cloudflare Workers` template
-
-## Initial Setup
-
-```bash
-cd cloudflare
-npm ci
-```
-
-Export your Cloudflare account ID before running any Wrangler command:
-
-```bash
-export CLOUDFLARE_ACCOUNT_ID=<your-account-id>
-```
-
-`wrangler.toml` intentionally omits `account_id` so this harness stays reusable. Do not commit the value back into the file.
-
-Then authenticate:
-
-```bash
-npm run whoami   # verify current auth
-npm run login    # browser OAuth flow (skip if CLOUDFLARE_API_TOKEN is set)
-```
-
-## Deploy
-
-```bash
-npm run deploy
-```
-
-Uploads `index.js` as the Worker script. Dashboard-managed vars, secrets, custom domain, and routes are preserved (`keep_vars = true`; secrets and routes are never touched when not declared in `wrangler.toml`).
-
-### Dry Run
-
-```bash
-npx wrangler deploy --dry-run --outdir dist
-```
+| File           | Purpose                                                                              |
+|----------------|--------------------------------------------------------------------------------------|
+| `index.js`     | Worker source (master). Pulumi reads this file at `pulumi up` time.                  |
+| `wrangler.toml`| Minimal config for `wrangler dev` / `wrangler tail`. No deploy settings here.        |
+| `package.json` | Pins wrangler and exposes `dev` / `tail` / `whoami`.                                 |
+| `.dev.vars`    | Gitignored. Holds `ORIGIN_BASE_URL` for local `wrangler dev`.                        |
+| `.dev.vars.example` | Template for `.dev.vars`.                                                       |
 
 ## Local Development
 
 ```bash
-npm run dev
+cd cloudflare
+npm ci
+cp .dev.vars.example .dev.vars   # then edit with your S3 origin URL
+npm run dev                       # http://localhost:8787
 ```
 
-For local `wrangler dev`, create `.dev.vars` with your own `ORIGIN_BASE_URL` (git-ignored, never committed):
+`.dev.vars` is gitignored. Example contents:
 
 ```
-ORIGIN_BASE_URL=https://example-origin/apt
+ORIGIN_BASE_URL=https://your-bucket.s3.amazonaws.com/apt
 ```
 
-## Logs
+## Live Log Inspection (production)
 
 ```bash
-npm run tail
+cd cloudflare
+npm run tail          # streams console.log output from the deployed Worker
 ```
 
-## Post-Deploy Checks
+Requires you to be authenticated:
 
 ```bash
-curl -I https://apt-awscli-v2.masanao.site/
-curl -fsSL https://apt-awscli-v2.masanao.site/public.key >/dev/null
+npm run whoami
+# If not logged in:
+npx wrangler login    # opens browser for OAuth (operator-only, one-time)
 ```
 
-In the dashboard, confirm the following were preserved after deployment:
+## Debugging Workflow
 
-- Settings → Variables: `ORIGIN_BASE_URL` is still present
-- Settings → Variables: secrets are still present
-- Triggers → Custom Domains: `apt-awscli-v2.masanao.site` is still bound
+```
+1. Edit cloudflare/index.js
+        ↓
+2. cd cloudflare && npm run dev          # localhost:8787, validate behavior
+        ↓ (looks good)
+3. cd ../pulumi && pulumi preview        # confirms Worker content hash diff
+        ↓
+4. pulumi up                              # deploys via Pulumi
+        ↓
+5. (optional) cd ../cloudflare && npm run tail   # observe production logs
+6. curl -I https://<your-custom-domain>/         # smoke-test
+```
 
-## Files
-
-| File | Purpose |
-|------|---------|
-| `index.js` | Worker source (master). Do not edit on the dashboard; edit here and redeploy. |
-| `wrangler.toml` | Wrangler configuration. Intentionally omits `account_id`, routes, vars, and secrets. |
-| `package.json` | Pins the `wrangler` version and provides npm scripts. |
+`wrangler dev` reads `wrangler.toml` for the script name / module entry, so
+the local environment matches production except for bindings (which come
+from `.dev.vars` locally instead of from Pulumi).

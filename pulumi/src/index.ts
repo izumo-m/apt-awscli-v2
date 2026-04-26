@@ -9,6 +9,7 @@ import { createLambdaIam }                              from "./iam";
 import { createLambda }                                 from "./lambda";
 import { createNotification }                           from "./notification";
 import { createScheduler }                              from "./scheduler";
+import { createCloudflareWorker }                       from "./cloudflare";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -71,6 +72,13 @@ if (cfg.enableScheduler) {
 const notification = cfg.notificationEmail
     ? createNotification(cfg, cfg.notificationEmail, lambdaFn)
     : undefined;
+
+// ─── Cloudflare Worker (opt-in) ────────────────────────────────────────────
+// Requires CLOUDFLARE_API_TOKEN env var when cloudflareEnabled is true.
+// See pulumi/src/cloudflare.ts for required token permissions.
+if (cfg.cloudflareEnabled) {
+    createCloudflareWorker(cfg);
+}
 
 // ─── Outputs ──────────────────────────────────────────────────────────────────
 

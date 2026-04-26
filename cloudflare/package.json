@@ -2,13 +2,11 @@
   "name": "apt-awscli-v2-cloudflare",
   "version": "0.0.0",
   "private": true,
-  "description": "Wrangler deploy harness for the apt-awscli-v2-proxy Cloudflare Worker",
+  "description": "Worker source and local dev tooling. Production deployment is managed by Pulumi (see ../pulumi/src/cloudflare.ts).",
   "scripts": {
-    "deploy": "wrangler deploy",
     "dev": "wrangler dev",
-    "tail": "wrangler tail",
-    "whoami": "wrangler whoami",
-    "login": "wrangler login"
+    "tail": "wrangler tail apt-awscli-v2-proxy",
+    "whoami": "wrangler whoami"
   },
   "devDependencies": {
     "wrangler": "^4.83.0"

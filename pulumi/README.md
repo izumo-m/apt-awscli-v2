@@ -461,6 +461,10 @@ npm run generate-index-html
 | `npm run logs` | View CloudWatch Logs (`--follow` / `--since N`) |
 | `npm run confirm-subscription` | Confirm SNS subscription via SDK |
 | `npm run generate-index-html` | Generate `pulumi.out/index.html` from README.md |
+| `npm run cf-config:set -- --input <json>` | Upload Cloudflare credentials JSON to SSM SecureString |
+| `npm run cf-config:show` | Read back Cloudflare credentials from SSM (token redacted) |
+| `npm run cf-purge -- --prefix <path>` | Manually purge Cloudflare cache under a path prefix |
+| `npm run cf-purge -- --all` | Manually purge the entire Cloudflare zone |
 
 ## Pulumi Config Key Reference
 
@@ -488,6 +492,164 @@ npm run generate-index-html
 | `aptAwscliV2:logRetentionDays` | | `14` | CloudWatch Logs retention days |
 | `aptAwscliV2:enableScheduler` | | `true` | Set to `false` to skip EventBridge Scheduler creation |
 | `aptAwscliV2:notificationEmail` | | Disabled | Email for Lambda failure notifications. Creates SNS + CloudWatch Alarm when set |
+| `aptAwscliV2:cloudflareEnabled` | | `false` | Master switch for Cloudflare integration. When `true`, Pulumi creates a Worker fronting S3 and the Lambda invalidates Cloudflare cache after each S3 update. See [Cloudflare Operations](#cloudflare-operations) |
+| `aptAwscliV2:cloudflareAccountId` | conditional | — | Cloudflare account ID. **Required** when `cloudflareEnabled=true` |
+| `aptAwscliV2:cloudflareZoneId` | conditional | — | Cloudflare zone ID. **Required** when `cloudflareEnabled=true` |
+| `aptAwscliV2:cloudflareSsmParam` | conditional | — | SSM SecureString parameter name holding `{"api_token":"..."}` for Lambda cache purge. **Required** when `cloudflareEnabled=true` |
+| `aptAwscliV2:cloudflareCustomDomain` | | Disabled | Opt-in. Hostname (e.g. `apt-awscli-v2.example.com`). When set, Pulumi binds a `WorkersCustomDomain` and DNS/SSL are auto-managed by Cloudflare |
+| `aptAwscliV2:cloudflarePublicBaseUrl` | | Derived | Opt-in override for the URL Lambda uses to build purge URLs. Defaults to `https://${cloudflareCustomDomain}` |
+
+## Cloudflare Operations
+
+Cloudflare integration is **opt-in**. When `aptAwscliV2:cloudflareEnabled=true`,
+Pulumi creates a Worker (`apt-awscli-v2-proxy`) that fronts S3 and the
+Lambda invalidates the matching edge cache after each S3 update.
+
+When disabled (default), no Cloudflare resources are created and the Lambda
+skips cache invalidation entirely.
+
+### Architecture
+
+```
+Lambda (cache purge)        Pulumi (Worker deploy)
+        │                            │
+        ▼                            ▼
+   SSM SecureString          CLOUDFLARE_API_TOKEN
+   {api_token: "..."}        env var (operator-only,
+   ── Lambda token ──        never in Pulumi state)
+                             ── Operator token ──
+        │                            │
+        └────────────┬───────────────┘
+                     ▼
+              Cloudflare API
+```
+
+Two **separate** API tokens are recommended (least privilege):
+
+- **Operator token** — used by `pulumi up` to create/update the Worker.
+  Provided to the Pulumi provider via the `CLOUDFLARE_API_TOKEN` env var.
+  Never written to Pulumi state.
+- **Lambda token** — used by the Lambda at runtime to purge cache. Stored
+  encrypted in SSM SecureString (`aptAwscliV2:cloudflareSsmParam`).
+
+If a single token is used for both, scope it to the union of the
+permissions below — but separate tokens are safer.
+
+### Required Token Permissions
+
+**Operator token (`CLOUDFLARE_API_TOKEN`):**
+
+| Permission | Scope | When required |
+|-----------|-------|---------------|
+| `Account → Workers Scripts: Edit` | target account | Always (Worker upload) |
+| `Account → Workers Subdomain: Read` | target account | Always (Worker metadata) |
+| `Zone → Workers Routes: Edit` | target zone | Only with `cloudflareCustomDomain` |
+| `Zone → Zone: Read` | target zone | Only with `cloudflareCustomDomain` |
+
+Create at *My Profile → API Tokens → Create Token → Custom token* in the
+Cloudflare dashboard.
+
+**Lambda token (SSM SecureString):**
+
+| Permission | Scope |
+|-----------|-------|
+| `Zone → Cache Purge` | target zone only |
+
+This token has no other powers — even if the Lambda is compromised, the
+attacker cannot deploy or modify the Worker.
+
+### SSM JSON Schema
+
+```json
+{ "api_token": "<cloudflare api token with Cache Purge permission>" }
+```
+
+Only the API token is in SSM. Non-secret identifiers (`zone_id`,
+`public_base_url`) come from Pulumi config and are passed to the Lambda
+as plain env vars.
+
+### Setup
+
+1. **In the Cloudflare dashboard**, look up the **Account ID** and the
+   **Zone ID** for your domain. Create the two API tokens described above.
+
+2. **Configure Pulumi** (use `pulumi config set --secret` for nothing —
+   none of these values are secret since the Lambda token lives in SSM):
+
+   ```bash
+   pulumi config set aptAwscliV2:cloudflareEnabled       true
+   pulumi config set aptAwscliV2:cloudflareAccountId     <account-id>
+   pulumi config set aptAwscliV2:cloudflareZoneId        <zone-id>
+   pulumi config set aptAwscliV2:cloudflareSsmParam      /apt-awscli-v2/cloudflare
+   # opt-in: bind a custom domain (Cloudflare creates DNS + SSL automatically)
+   pulumi config set aptAwscliV2:cloudflareCustomDomain  apt-awscli-v2.example.com
+   ```
+
+3. **Deploy** with the operator token in the environment:
+
+   ```bash
+   export CLOUDFLARE_API_TOKEN=<operator-token>
+   pulumi up
+   ```
+
+4. **Upload the Lambda token to SSM** (after `pulumi up` so the IAM
+   permissions on the SSM parameter exist):
+
+   ```bash
+   npm run cf-config:set -- --token "<lambda-token>"
+   # or from a JSON file: npm run cf-config:set -- --input cloudflare.json
+   npm run cf-config:show          # verify (token is redacted in output)
+   ```
+
+After this, every Lambda run that updates S3 will purge the corresponding
+URLs at the Cloudflare edge.
+
+### Failure Behavior
+
+If a purge fails after a successful S3 update, the Lambda fails the
+invocation. This surfaces through the existing SNS alarm so an operator
+is paged. The cache also self-heals within 24h via the
+`Cache-Control: public, max-age=86400` TTL on `dists/**` objects, so the
+worst case is one stale day, not indefinite staleness.
+
+### Worker Source and Local Debugging
+
+The Worker source lives in [`../cloudflare/index.js`](../../cloudflare/index.js)
+and is uploaded by Pulumi at `pulumi up` time. **Do not run
+`wrangler deploy`** — it would conflict with Pulumi state.
+
+Local development uses `wrangler dev` against a `.dev.vars` file (gitignored):
+
+```bash
+cd cloudflare
+cp .dev.vars.example .dev.vars   # then set ORIGIN_BASE_URL
+npm run dev                       # http://localhost:8787
+```
+
+Recommended cycle:
+
+```
+1. Edit cloudflare/index.js
+2. cd cloudflare && npm run dev          # local validation
+3. cd ../pulumi && pulumi preview        # confirm the WorkersScript content diff
+4. pulumi up                              # deploy
+5. cd ../cloudflare && npm run tail      # observe production logs
+6. curl -I https://<your-custom-domain>/ # smoke-test
+```
+
+### Manual Purge (Development)
+
+To clear cache for a specific path without waiting for the TTL:
+
+```bash
+npm run cf-purge -- --prefix dists/
+npm run cf-purge -- --prefix pool/main/awscli-v2/
+npm run cf-purge -- --prefix '' --dry-run     # show what would be purged
+npm run cf-purge -- --all                      # purge entire zone
+```
+
+The tool lists matching S3 objects, converts each key to a public URL, and
+sends per-URL purge requests in batches of 30 (Cloudflare Free plan limit).
 
 ## Resource Name Derivation Rules
 
