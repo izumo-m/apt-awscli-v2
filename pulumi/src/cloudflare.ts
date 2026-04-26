@@ -3,8 +3,11 @@
  *
  * Manages:
  *   - WorkersScript           — uploads `cloudflare/index.js` as the Worker
- *                               with ORIGIN_BASE_URL plain-text binding
- *                               derived from aptAwscliV2:s3Uri
+ *                               with ORIGIN_BASE_URL secret_text binding
+ *                               derived from aptAwscliV2:s3Uri. The Cloudflare
+ *                               script name is `${resourcePrefix}-proxy` so
+ *                               dev and prod stacks do not overwrite each
+ *                               other in a shared Cloudflare account.
  *   - WorkersCustomDomain     — created only when cloudflareCustomDomain is set
  *
  * Does NOT manage:
@@ -31,7 +34,6 @@ export interface CloudflareResult {
     scriptName: string;
 }
 
-const WORKER_SCRIPT_NAME = "apt-awscli-v2-proxy";
 const WORKER_SOURCE_PATH = path.resolve(__dirname, "..", "..", "cloudflare", "index.js");
 const WORKER_COMPATIBILITY_DATE = "2026-04-19";
 
@@ -48,9 +50,10 @@ export function createCloudflareWorker(cfg: AppConfig): CloudflareResult {
         throw new Error("createCloudflareWorker requires cloudflareAccountId and cloudflareZoneId");
     }
 
-    const accountId = cfg.cloudflareAccountId;
-    const zoneId    = cfg.cloudflareZoneId;
-    const originUrl = deriveOriginUrl(cfg.s3Uri);
+    const accountId  = cfg.cloudflareAccountId;
+    const zoneId     = cfg.cloudflareZoneId;
+    const originUrl  = deriveOriginUrl(cfg.s3Uri);
+    const scriptName = `${cfg.resourcePrefix}-proxy`;
 
     if (!fs.existsSync(WORKER_SOURCE_PATH)) {
         throw new Error(`Worker source file not found: ${WORKER_SOURCE_PATH}`);
@@ -63,7 +66,7 @@ export function createCloudflareWorker(cfg: AppConfig): CloudflareResult {
     // (EDoS mitigation). Leaking the origin URL would defeat that gate.
     const script = new cloudflare.WorkersScript(`${cfg.resourcePrefix}-worker`, {
         accountId,
-        scriptName:        WORKER_SCRIPT_NAME,
+        scriptName,
         content,
         mainModule:        "index.js",
         compatibilityDate: WORKER_COMPATIBILITY_DATE,
@@ -87,13 +90,13 @@ export function createCloudflareWorker(cfg: AppConfig): CloudflareResult {
                 accountId,
                 zoneId,
                 hostname: cfg.cloudflareCustomDomain,
-                service:  WORKER_SCRIPT_NAME,
+                service:  scriptName,
             },
             { dependsOn: [script] },
         );
     }
 
-    return { scriptName: WORKER_SCRIPT_NAME };
+    return { scriptName };
 }
 
 /**

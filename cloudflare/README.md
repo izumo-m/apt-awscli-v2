@@ -45,6 +45,17 @@ cd cloudflare
 npm run tail          # streams console.log output from the deployed Worker
 ```
 
+`npm run tail` targets `apt-awscli-v2-proxy` — the **prod** stack's Worker
+(prod uses `resourcePrefix=apt-awscli-v2`, so the deployed script name has no
+suffix). To tail a non-prod stack, pass the prefixed script name explicitly:
+
+```bash
+npx wrangler tail apt-awscli-v2-dev-proxy   # dev stack
+```
+
+Pulumi names each Worker `${resourcePrefix}-proxy` so dev and prod do not
+overwrite each other — see `../pulumi/src/cloudflare.ts`.
+
 Requires you to be authenticated:
 
 ```bash
