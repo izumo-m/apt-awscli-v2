@@ -25,3 +25,19 @@ config:
   # aptAwscliV2:logRetentionDays: "30"              # CloudWatch log retention days for Lambda
   # aptAwscliV2:enableScheduler: "true"             # Set to false to skip EventBridge Scheduler creation
   # aptAwscliV2:notificationEmail: alert@example.com  # Email notification on Lambda failure (creates SNS + CloudWatch Alarm)
+
+  # ─── Cloudflare integration (opt-in) ─────────────────────────────────────
+  # When cloudflareEnabled is true, Pulumi creates a Cloudflare Worker
+  # (apt-awscli-v2-proxy) that fronts S3 and the Lambda invalidates the
+  # corresponding edge cache after each S3 update.
+  # Default is "false" — no Cloudflare resources are created.
+  #
+  # `pulumi up` requires the CLOUDFLARE_API_TOKEN env var when enabled.
+  # See pulumi/README.md §Cloudflare Operations for required token permissions.
+  #
+  # aptAwscliV2:cloudflareEnabled: "true"
+  # aptAwscliV2:cloudflareAccountId: "<cloudflare account id>"
+  # aptAwscliV2:cloudflareZoneId:    "<cloudflare zone id>"
+  # aptAwscliV2:cloudflareSsmParam:  /custom/path/cloudflare    # Optional. SSM SecureString holding {"api_token":"..."} for Lambda cache purge. Defaults to /<resourcePrefix>/cloudflare.
+  # aptAwscliV2:cloudflareCustomDomain:   apt-awscli-v2.example.com  # Opt-in. Pulumi creates a WorkersCustomDomain when set.
+  # aptAwscliV2:cloudflarePublicBaseUrl:  https://apt-awscli-v2.example.com  # Opt-in override. Defaults to https://${cloudflareCustomDomain}.

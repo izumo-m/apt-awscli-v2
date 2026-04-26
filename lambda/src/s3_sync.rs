@@ -15,6 +15,14 @@ pub struct ObjectMetadata {
     pub content_type: Option<String>,
 }
 
+/// Result of `upload()`: which S3 keys were newly created/updated and which were deleted.
+/// Both lists hold full S3 keys (with prefix applied), suitable for cache invalidation.
+#[derive(Debug, Default)]
+pub struct UploadResult {
+    pub uploaded: Vec<String>,
+    pub deleted: Vec<String>,
+}
+
 /// A pair of a path pattern (glob syntax) and metadata.
 /// When passed to `upload()`, metadata is attached to files whose relative path matches.
 ///
@@ -156,7 +164,7 @@ pub async fn upload(
     local_dir: &Path,
     concurrency: usize,
     metadata_rules: &[MetadataRule],
-) -> Result<()> {
+) -> Result<UploadResult> {
     // Compile glob patterns (once)
     let compiled: Vec<(Pattern, &ObjectMetadata)> = metadata_rules
         .iter()
@@ -190,6 +198,9 @@ pub async fn upload(
             }
         })
         .collect();
+
+    // Capture the keys we are about to upload so we can return them on success.
+    let uploaded_keys: Vec<String> = to_upload.iter().map(|(k, _, _, _)| k.clone()).collect();
 
     // Upload in parallel
     let results: Vec<Result<()>> = stream::iter(to_upload)
@@ -227,11 +238,13 @@ pub async fn upload(
     let local_keys: std::collections::HashSet<String> =
         local_files.keys().map(|r| make_key(r, prefix)).collect();
 
-    let to_delete: Vec<_> = remote_objects
+    let to_delete: Vec<String> = remote_objects
         .keys()
         .filter(|key| !local_keys.contains(*key))
         .cloned()
         .collect();
+
+    let deleted_keys = to_delete.clone();
 
     let delete_results: Vec<Result<()>> = stream::iter(to_delete)
         .map(|key| {
@@ -257,7 +270,10 @@ pub async fn upload(
         result?;
     }
 
-    Ok(())
+    Ok(UploadResult {
+        uploaded: uploaded_keys,
+        deleted: deleted_keys,
+    })
 }
 
 /// Set a file's mtime to match an S3 object's last_modified timestamp.

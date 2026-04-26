@@ -49,6 +49,14 @@ pub struct Config {
     pub zstd_threads: u32,
     /// zstd compression level (default: 9)
     pub zstd_level: i32,
+    /// SSM parameter name holding the Cloudflare API token JSON.
+    /// When `None`, Cloudflare cache invalidation is skipped entirely.
+    pub cf_ssm_param: Option<String>,
+    /// Cloudflare zone ID (non-secret). Required when `cf_ssm_param` is set.
+    pub cf_zone_id: Option<String>,
+    /// Public base URL fronting the APT repository (non-secret).
+    /// Required when `cf_ssm_param` is set; used to build purge URLs.
+    pub cf_public_base_url: Option<String>,
 }
 
 impl Config {
@@ -91,6 +99,10 @@ impl Config {
             .and_then(|s| s.parse::<i32>().ok())
             .unwrap_or(9);
 
+        let cf_ssm_param = opt_env("APT_AWSCLI_V2_CF_SSM_PARAM");
+        let cf_zone_id = opt_env("APT_AWSCLI_V2_CF_ZONE_ID");
+        let cf_public_base_url = opt_env("APT_AWSCLI_V2_CF_PUBLIC_BASE_URL");
+
         Ok(Config {
             s3_bucket,
             s3_prefix,
@@ -103,6 +115,9 @@ impl Config {
             threads,
             zstd_threads,
             zstd_level,
+            cf_ssm_param,
+            cf_zone_id,
+            cf_public_base_url,
         })
     }
 

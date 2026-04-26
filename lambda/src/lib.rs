@@ -1,5 +1,6 @@
 pub mod apt_index;
 pub mod builder;
+pub mod cloudflare;
 pub mod config;
 pub mod deb;
 pub mod deploy;

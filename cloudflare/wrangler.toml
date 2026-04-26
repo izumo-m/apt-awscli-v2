@@ -1,0 +1,11 @@
+name = "apt-awscli-v2-proxy"
+main = "index.js"
+compatibility_date = "2026-04-19"
+
+# This file exists only for `wrangler dev` and `wrangler tail` against the
+# locally-checked-out Worker source. Production deployment is managed by
+# Pulumi (see ../pulumi/src/cloudflare.ts) — do NOT run `wrangler deploy`
+# from this directory.
+#
+# For `wrangler dev`, set ORIGIN_BASE_URL in cloudflare/.dev.vars (gitignored).
+

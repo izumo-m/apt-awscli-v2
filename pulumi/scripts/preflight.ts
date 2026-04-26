@@ -1,10 +1,10 @@
 /**
  * pre-flight: helpers for source diff display and shared script utilities.
  *
- * ## Archive cache
- * Built archives are placed at pulumi.out/.cache/{hash}.zip (PulumiAsset).
- * The hash takes both source files and lambdaArch as inputs, so changing
- * the architecture also changes the hash (= path).
+ * ## Build cache
+ * Built Lambda binaries are placed at pulumi.out/.cache/{hash}.bootstrap
+ * (PulumiAsset).  The hash takes both source files and lambdaArch as inputs,
+ * so changing the architecture also changes the hash (= path).
  *
  * ## Source snapshots
  * Snapshots are saved to pulumi.out/assets.{hash}/ (PulumiAsset).
@@ -293,6 +293,18 @@ export function getConfig(key: string, defaultValue?: string): string | undefine
 export function getLambdaName(): string {
     const prefix = getConfig("aptAwscliV2:resourcePrefix") || "apt-awscli-v2";
     return `${prefix}-lambda`;
+}
+
+/**
+ * Return the SSM parameter name holding the Cloudflare Lambda token.
+ * Mirrors the default in pulumi/src/config.ts: explicit override via
+ * aptAwscliV2:cloudflareSsmParam, otherwise `/${resourcePrefix}/cloudflare`.
+ */
+export function getCloudflareSsmParamName(): string {
+    const explicit = getConfig("aptAwscliV2:cloudflareSsmParam");
+    if (explicit) return explicit;
+    const prefix = getConfig("aptAwscliV2:resourcePrefix") || "apt-awscli-v2";
+    return `/${prefix}/cloudflare`;
 }
 
 /**

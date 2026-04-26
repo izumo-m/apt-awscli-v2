@@ -1,7 +1,7 @@
 import * as path from "path";
 import * as pulumi from "@pulumi/pulumi";
 import * as aws from "@pulumi/aws";
-import { AppConfig } from "./config";
+import { AppConfig, resolvePublicBaseUrl } from "./config";
 import { watchedFiles, computeSourceHash } from "./lambdaSource";
 import { checkAndBuild } from "./check-and-build";
 
@@ -36,7 +36,7 @@ export function createLambda(
     // This ensures hash values are consistent across user environments.
     // lambdaDir itself is an absolute path based on __dirname, so it doesn't depend on the working directory.
     //
-    // checkAndBuild() ensures the archive exists before Pulumi evaluates the FileArchive.
+    // checkAndBuild() ensures the bootstrap binary exists before Pulumi evaluates the AssetArchive.
     // It returns the final hash (which may differ if the build updated watched files like Cargo.lock).
     const lambdaDir = path.resolve(__dirname, "../../lambda");
 
@@ -60,17 +60,38 @@ export function createLambda(
         APT_AWSCLI_V2_ZSTD_LEVEL:   String(cfg.lambdaZstdLevel),
     };
 
+    // Cloudflare integration: only the SSM parameter name and non-secret
+    // identifiers are passed to the Lambda. The API token itself stays in
+    // SSM SecureString and is never written to Pulumi state.
+    if (cfg.cloudflareEnabled) {
+        const publicBaseUrl = resolvePublicBaseUrl(cfg);
+        if (!cfg.cloudflareSsmParam || !cfg.cloudflareZoneId || !publicBaseUrl) {
+            // Should be impossible after loadConfig validation; guard anyway.
+            throw new Error("cloudflareEnabled=true but required fields are missing");
+        }
+        lambdaEnvVars.APT_AWSCLI_V2_CF_SSM_PARAM       = cfg.cloudflareSsmParam;
+        lambdaEnvVars.APT_AWSCLI_V2_CF_ZONE_ID         = cfg.cloudflareZoneId;
+        lambdaEnvVars.APT_AWSCLI_V2_CF_PUBLIC_BASE_URL = publicBaseUrl;
+    }
+
     // ─── Lambda Function ──────────────────────────────────────────────────────
-    // sourceHash includes lambdaArch, so changing architecture also changes the archive path.
-    // ignoreChanges on "code" prevents diffs from zip metadata (timestamps);
-    // sourceCodeHash drives update detection based on the source hash alone.
-    const archivePath = path.join("..", "pulumi.out", ".cache", `${sourceHash}.zip`);
+    // sourceHash includes lambdaArch, so changing architecture also changes the binary path.
+    //
+    // We use AssetArchive (content-hashed) over FileArchive (zip-bytes-hashed) so
+    // that identical source produces an identical Pulumi asset hash on different
+    // machines — the zip Pulumi packs internally embeds timestamps, but the input
+    // bootstrap binary is reproducible. This avoids spurious code re-uploads when
+    // a different operator runs `pulumi up` on the same commit, while still
+    // re-uploading whenever the bootstrap binary actually changes.
+    const bootstrapPath = path.join("..", "pulumi.out", ".cache", `${sourceHash}.bootstrap`);
 
     const lambdaFn = new aws.lambda.Function(lambdaName, {
         name: lambdaName,
         runtime: "provided.al2023",
         architectures: [cfg.lambdaArch],
-        code: new pulumi.asset.FileArchive(archivePath),
+        code: new pulumi.asset.AssetArchive({
+            bootstrap: new pulumi.asset.FileAsset(bootstrapPath),
+        }),
         sourceCodeHash: sourceHash,
         handler: "bootstrap",
         role: lambdaRole.arn,
@@ -80,7 +101,6 @@ export function createLambda(
         environment: { variables: lambdaEnvVars },
     }, {
         dependsOn: [lambdaRole, lambdaRolePolicy, logGroup],
-        ignoreChanges: ["code"],
     });
 
     return { lambdaFn, logGroup };

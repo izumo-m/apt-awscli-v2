@@ -1,6 +1,6 @@
 {
   "name": "apt-awscli-v2-pulumi",
-  "version": "1.6.1",
+  "version": "1.7.0",
   "scripts": {
     "bootstrap": "ts-node scripts/bootstrap.ts",
     "build": "tsc",
@@ -13,24 +13,28 @@
     "stack:ls": "pulumi stack ls",
     "config": "pulumi config",
     "confirm-subscription": "ts-node scripts/confirm-subscription.ts",
-    "generate-index-html": "ts-node scripts/generate-index-html.ts"
+    "generate-index-html": "ts-node scripts/generate-index-html.ts",
+    "cf-config:set": "ts-node scripts/cf-config.ts set",
+    "cf-config:show": "ts-node scripts/cf-config.ts show",
+    "cf-purge": "ts-node scripts/cf-purge.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-cloudwatch-logs": "^3.1029.0",
-    "@aws-sdk/client-lambda": "^3.1029.0",
-    "@aws-sdk/client-s3": "^3.1029.0",
-    "@aws-sdk/client-sns": "^3.1029.0",
-    "@aws-sdk/client-ssm": "^3.1029.0",
-    "@pulumi/aws": "^7.25.0",
-    "@pulumi/pulumi": "^3.230.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.1037.0",
+    "@aws-sdk/client-lambda": "^3.1037.0",
+    "@aws-sdk/client-s3": "^3.1037.0",
+    "@aws-sdk/client-sns": "^3.1037.0",
+    "@aws-sdk/client-ssm": "^3.1037.0",
+    "@pulumi/aws": "^7.27.0",
+    "@pulumi/cloudflare": "^6.14.0",
+    "@pulumi/pulumi": "^3.232.0",
     "js-yaml": "^4.1.1",
-    "marked": "^18.0.0",
+    "marked": "^18.0.2",
     "openpgp": "^6.3.0"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.6.0",
     "ts-node": "^10.9.2",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.3"
   }
 }
