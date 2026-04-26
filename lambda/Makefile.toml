@@ -34,11 +34,10 @@ docker run --rm \
   "$DOCKER_IMAGE-$LAMBDA_ARCH" \
   cargo lambda build --release --compiler cargo --target $MUSL_TARGET
 cp "$CARGO_LAMBDA_DIR/bootstrap" "$LAMBDA_DIR/bootstrap"
-zip -jq "$LAMBDA_DIR/bootstrap.zip" "$LAMBDA_DIR/bootstrap"
-if [ -n "${APT_AWSCLI_V2_OUTPUT_ZIP:-}" ]; then
-  mkdir -p "$(dirname "$APT_AWSCLI_V2_OUTPUT_ZIP")"
-  cp "$LAMBDA_DIR/bootstrap.zip" "$APT_AWSCLI_V2_OUTPUT_ZIP"
-  echo "build: created $APT_AWSCLI_V2_OUTPUT_ZIP"
+if [ -n "${APT_AWSCLI_V2_OUTPUT_BOOTSTRAP:-}" ]; then
+  mkdir -p "$(dirname "$APT_AWSCLI_V2_OUTPUT_BOOTSTRAP")"
+  cp "$LAMBDA_DIR/bootstrap" "$APT_AWSCLI_V2_OUTPUT_BOOTSTRAP"
+  echo "build: created $APT_AWSCLI_V2_OUTPUT_BOOTSTRAP"
 fi
 '''
 
@@ -49,11 +48,10 @@ script = '''
 cargo lambda build --release --compiler cargo --target $MUSL_TARGET
 mkdir -p "$LAMBDA_DIR"
 cp "$CARGO_LAMBDA_DIR/bootstrap" "$LAMBDA_DIR/bootstrap"
-zip -jq "$LAMBDA_DIR/bootstrap.zip" "$LAMBDA_DIR/bootstrap"
-if [ -n "${APT_AWSCLI_V2_OUTPUT_ZIP:-}" ]; then
-  mkdir -p "$(dirname "$APT_AWSCLI_V2_OUTPUT_ZIP")"
-  cp "$LAMBDA_DIR/bootstrap.zip" "$APT_AWSCLI_V2_OUTPUT_ZIP"
-  echo "build: created $APT_AWSCLI_V2_OUTPUT_ZIP"
+if [ -n "${APT_AWSCLI_V2_OUTPUT_BOOTSTRAP:-}" ]; then
+  mkdir -p "$(dirname "$APT_AWSCLI_V2_OUTPUT_BOOTSTRAP")"
+  cp "$LAMBDA_DIR/bootstrap" "$APT_AWSCLI_V2_OUTPUT_BOOTSTRAP"
+  echo "build: created $APT_AWSCLI_V2_OUTPUT_BOOTSTRAP"
 fi
 '''
 

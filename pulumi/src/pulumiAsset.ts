@@ -1,15 +1,20 @@
 /**
- * PulumiAsset - A class for managing archives and snapshots of arbitrary assets.
+ * PulumiAsset - A class for managing snapshots of arbitrary assets.
  * Following CDK's cdk.out/, assets are placed under the pulumi.out/ directory.
  *
  * Directory structure:
  *   pulumi.out/
- *     assets.{hash}/    Source file snapshot (for diff display)
+ *     assets.{hash}/      Source file snapshot (for diff display)
  *     .cache/
- *       {hash}.zip      Built archive (addressed by content + extra inputs)
+ *       {hash}.bootstrap  Built Lambda binary (addressed by content + extra inputs)
  *
  * Hash is computed by computeSourceHash(files, baseDir, extraInputs).
  * Including architecture in extraInputs means the hash changes when arch changes.
+ *
+ * The cached bootstrap is consumed by Pulumi via
+ *   pulumi.asset.AssetArchive({bootstrap: FileAsset(path)})
+ * in src/lambda.ts, which produces a content-based asset hash that is stable
+ * across machines for identical source.
  */
 
 import * as fs from "fs";
@@ -27,25 +32,9 @@ export class PulumiAsset {
         this._baseDir = baseDir;
     }
 
-    /** Archive path: {outDir}/.cache/{hash}.zip */
-    archivePath(outDir: string): string {
-        return path.join(outDir, ".cache", `${this.hash}.zip`);
-    }
-
     /** Snapshot directory: {outDir}/assets.{hash} */
     snapshotDir(outDir: string): string {
         return path.join(outDir, `assets.${this.hash}`);
-    }
-
-    /**
-     * Run a build if the archive does not exist (idempotent).
-     * The build argument is the output ZIP path. The ZIP must exist at that path after the build.
-     */
-    ensureArchive(outDir: string, build: (outputZipPath: string) => void): void {
-        const zipPath = this.archivePath(outDir);
-        if (fs.existsSync(zipPath)) return;
-        fs.mkdirSync(path.dirname(zipPath), { recursive: true });
-        build(zipPath);
     }
 
     /** Create a snapshot (idempotent). Skips if the target directory already exists. */

@@ -1,10 +1,10 @@
 /**
  * pre-flight: helpers for source diff display and shared script utilities.
  *
- * ## Archive cache
- * Built archives are placed at pulumi.out/.cache/{hash}.zip (PulumiAsset).
- * The hash takes both source files and lambdaArch as inputs, so changing
- * the architecture also changes the hash (= path).
+ * ## Build cache
+ * Built Lambda binaries are placed at pulumi.out/.cache/{hash}.bootstrap
+ * (PulumiAsset).  The hash takes both source files and lambdaArch as inputs,
+ * so changing the architecture also changes the hash (= path).
  *
  * ## Source snapshots
  * Snapshots are saved to pulumi.out/assets.{hash}/ (PulumiAsset).
