@@ -38,6 +38,6 @@ config:
   # aptAwscliV2:cloudflareEnabled: "true"
   # aptAwscliV2:cloudflareAccountId: "<cloudflare account id>"
   # aptAwscliV2:cloudflareZoneId:    "<cloudflare zone id>"
-  # aptAwscliV2:cloudflareSsmParam:  /apt-awscli-v2/cloudflare    # SSM SecureString holding {"api_token":"..."} for Lambda cache purge.
+  # aptAwscliV2:cloudflareSsmParam:  /custom/path/cloudflare    # Optional. SSM SecureString holding {"api_token":"..."} for Lambda cache purge. Defaults to /<resourcePrefix>/cloudflare.
   # aptAwscliV2:cloudflareCustomDomain:   apt-awscli-v2.example.com  # Opt-in. Pulumi creates a WorkersCustomDomain when set.
   # aptAwscliV2:cloudflarePublicBaseUrl:  https://apt-awscli-v2.example.com  # Opt-in override. Defaults to https://${cloudflareCustomDomain}.

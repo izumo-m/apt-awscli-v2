@@ -17,7 +17,6 @@
  *   The Pulumi Cloudflare provider reads CLOUDFLARE_API_TOKEN from the
  *   environment. The token must have:
  *     - Account → Workers Scripts: Edit
- *     - Account → Workers Subdomain: Read
  *     - Zone    → Workers Routes: Edit   (only if cloudflareCustomDomain is set)
  *     - Zone    → Zone: Read              (only if cloudflareCustomDomain is set)
  *   This token is OPERATOR-only — it is never stored in Pulumi state.
@@ -59,6 +58,9 @@ export function createCloudflareWorker(cfg: AppConfig): CloudflareResult {
     const content = fs.readFileSync(WORKER_SOURCE_PATH, "utf8");
 
     // Worker script: uploads index.js with ORIGIN_BASE_URL bound from s3Uri.
+    // ORIGIN_BASE_URL is treated as a secret because production deployments
+    // include a random UUID prefix in s3Uri to prevent direct S3 access
+    // (EDoS mitigation). Leaking the origin URL would defeat that gate.
     const script = new cloudflare.WorkersScript(`${cfg.resourcePrefix}-worker`, {
         accountId,
         scriptName:        WORKER_SCRIPT_NAME,
@@ -67,7 +69,7 @@ export function createCloudflareWorker(cfg: AppConfig): CloudflareResult {
         compatibilityDate: WORKER_COMPATIBILITY_DATE,
         bindings: [
             {
-                type: "plain_text",
+                type: "secret_text",
                 name: "ORIGIN_BASE_URL",
                 text: originUrl,
             },
@@ -84,9 +86,8 @@ export function createCloudflareWorker(cfg: AppConfig): CloudflareResult {
             {
                 accountId,
                 zoneId,
-                hostname:    cfg.cloudflareCustomDomain,
-                service:     WORKER_SCRIPT_NAME,
-                environment: "production",
+                hostname: cfg.cloudflareCustomDomain,
+                service:  WORKER_SCRIPT_NAME,
             },
             { dependsOn: [script] },
         );

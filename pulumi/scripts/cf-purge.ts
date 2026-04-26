@@ -25,7 +25,7 @@ import {
     S3Client,
     ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
-import { addErrorContext, getConfig, handleError } from "./preflight";
+import { addErrorContext, getCloudflareSsmParamName, getConfig, handleError } from "./preflight";
 
 const PURGE_BATCH_SIZE = 30;
 
@@ -164,13 +164,7 @@ async function purge(
 async function main(): Promise<void> {
     const args = parseArgs(process.argv);
 
-    const ssmParam = getConfig("aptAwscliV2:cloudflareSsmParam");
-    if (!ssmParam) {
-        throw new Error(
-            "aptAwscliV2:cloudflareSsmParam is not set in Pulumi config.\n" +
-            "  Run: pulumi config set aptAwscliV2:cloudflareSsmParam /apt-awscli-v2/cloudflare"
-        );
-    }
+    const ssmParam = getCloudflareSsmParamName();
     const zoneId = getConfig("aptAwscliV2:cloudflareZoneId");
     if (!zoneId) {
         throw new Error("aptAwscliV2:cloudflareZoneId is not set in Pulumi config");

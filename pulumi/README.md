@@ -495,7 +495,7 @@ npm run generate-index-html
 | `aptAwscliV2:cloudflareEnabled` | | `false` | Master switch for Cloudflare integration. When `true`, Pulumi creates a Worker fronting S3 and the Lambda invalidates Cloudflare cache after each S3 update. See [Cloudflare Operations](#cloudflare-operations) |
 | `aptAwscliV2:cloudflareAccountId` | conditional | — | Cloudflare account ID. **Required** when `cloudflareEnabled=true` |
 | `aptAwscliV2:cloudflareZoneId` | conditional | — | Cloudflare zone ID. **Required** when `cloudflareEnabled=true` |
-| `aptAwscliV2:cloudflareSsmParam` | conditional | — | SSM SecureString parameter name holding `{"api_token":"..."}` for Lambda cache purge. **Required** when `cloudflareEnabled=true` |
+| `aptAwscliV2:cloudflareSsmParam` | | `/<resourcePrefix>/cloudflare` | SSM SecureString parameter name holding `{"api_token":"..."}` for Lambda cache purge. Override only when sharing parameters across stacks |
 | `aptAwscliV2:cloudflareCustomDomain` | | Disabled | Opt-in. Hostname (e.g. `apt-awscli-v2.example.com`). When set, Pulumi binds a `WorkersCustomDomain` and DNS/SSL are auto-managed by Cloudflare |
 | `aptAwscliV2:cloudflarePublicBaseUrl` | | Derived | Opt-in override for the URL Lambda uses to build purge URLs. Defaults to `https://${cloudflareCustomDomain}` |
 
@@ -542,7 +542,6 @@ permissions below — but separate tokens are safer.
 | Permission | Scope | When required |
 |-----------|-------|---------------|
 | `Account → Workers Scripts: Edit` | target account | Always (Worker upload) |
-| `Account → Workers Subdomain: Read` | target account | Always (Worker metadata) |
 | `Zone → Workers Routes: Edit` | target zone | Only with `cloudflareCustomDomain` |
 | `Zone → Zone: Read` | target zone | Only with `cloudflareCustomDomain` |
 
@@ -580,10 +579,14 @@ as plain env vars.
    pulumi config set aptAwscliV2:cloudflareEnabled       true
    pulumi config set aptAwscliV2:cloudflareAccountId     <account-id>
    pulumi config set aptAwscliV2:cloudflareZoneId        <zone-id>
-   pulumi config set aptAwscliV2:cloudflareSsmParam      /apt-awscli-v2/cloudflare
    # opt-in: bind a custom domain (Cloudflare creates DNS + SSL automatically)
    pulumi config set aptAwscliV2:cloudflareCustomDomain  apt-awscli-v2.example.com
    ```
+
+   The Lambda's SSM parameter name defaults to `/<resourcePrefix>/cloudflare`
+   (e.g. `/apt-awscli-v2-dev/cloudflare`), so dev and prod stacks do not
+   collide. Override with `aptAwscliV2:cloudflareSsmParam` only if you need
+   a shared parameter across stacks.
 
 3. **Deploy** with the operator token in the environment:
 

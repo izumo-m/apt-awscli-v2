@@ -59,7 +59,8 @@ export interface AppConfig {
     cloudflareAccountId:      string | undefined;
     cloudflareZoneId:         string | undefined;
     // SSM SecureString parameter holding `{"api_token":"..."}` for Lambda
-    // runtime cache purge. Required when cloudflareEnabled is true.
+    // runtime cache purge. Optional; defaults to `/${resourcePrefix}/cloudflare`
+    // when cloudflareEnabled is true.
     cloudflareSsmParam:       string | undefined;
     // Opt-in: when set, Pulumi creates a WorkersCustomDomain so the Worker
     // is reachable at https://<this-host>.
@@ -95,7 +96,7 @@ export function loadConfig(): AppConfig {
         logRetentionDays:       config.getNumber("logRetentionDays") ?? 14,
         enableScheduler:        config.getBoolean("enableScheduler") ?? true,
         notificationEmail:      config.get("notificationEmail"),
-        ...loadCloudflareConfig(config),
+        ...loadCloudflareConfig(config, resourcePrefix),
     };
 }
 
@@ -108,7 +109,7 @@ interface CloudflareConfig {
     cloudflarePublicBaseUrl:  string | undefined;
 }
 
-function loadCloudflareConfig(config: pulumi.Config): CloudflareConfig {
+function loadCloudflareConfig(config: pulumi.Config, resourcePrefix: string): CloudflareConfig {
     const enabled         = config.getBoolean("cloudflareEnabled") ?? false;
     const accountId       = config.get("cloudflareAccountId");
     const zoneId          = config.get("cloudflareZoneId");
@@ -143,7 +144,6 @@ function loadCloudflareConfig(config: pulumi.Config): CloudflareConfig {
     // Cloudflare enabled: enforce required fields.
     if (!accountId) throw new Error("cloudflareEnabled=true requires aptAwscliV2:cloudflareAccountId");
     if (!zoneId)    throw new Error("cloudflareEnabled=true requires aptAwscliV2:cloudflareZoneId");
-    if (!ssmParam)  throw new Error("cloudflareEnabled=true requires aptAwscliV2:cloudflareSsmParam");
 
     // Lambda needs a public base URL to construct purge URLs.
     // Provide either an explicit publicBaseUrl, or a customDomain to derive from.
@@ -158,7 +158,7 @@ function loadCloudflareConfig(config: pulumi.Config): CloudflareConfig {
         cloudflareEnabled:       true,
         cloudflareAccountId:     accountId,
         cloudflareZoneId:        zoneId,
-        cloudflareSsmParam:      ssmParam,
+        cloudflareSsmParam:      ssmParam ?? `/${resourcePrefix}/cloudflare`,
         cloudflareCustomDomain:  customDomain,
         cloudflarePublicBaseUrl: publicBaseUrl,
     };

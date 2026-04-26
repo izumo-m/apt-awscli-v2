@@ -30,22 +30,10 @@ import {
     PutParameterCommand,
     GetParameterCommand,
 } from "@aws-sdk/client-ssm";
-import { addErrorContext, getConfig, handleError } from "./preflight";
+import { addErrorContext, getCloudflareSsmParamName, handleError } from "./preflight";
 
 interface LambdaTokenJson {
     api_token: string;
-}
-
-function getSsmParamName(): string {
-    const name = getConfig("aptAwscliV2:cloudflareSsmParam");
-    if (!name) {
-        process.stderr.write(
-            "Error: aptAwscliV2:cloudflareSsmParam is not set in Pulumi config.\n" +
-            "  Run: pulumi config set aptAwscliV2:cloudflareSsmParam /apt-awscli-v2/cloudflare\n"
-        );
-        process.exit(1);
-    }
-    return name;
 }
 
 interface ParsedArgs {
@@ -155,7 +143,7 @@ async function showToken(paramName: string): Promise<void> {
 
 async function main(): Promise<void> {
     const args      = parseArgs(process.argv);
-    const paramName = getSsmParamName();
+    const paramName = getCloudflareSsmParamName();
 
     if (args.subcommand === "set") {
         await setToken(paramName, args);

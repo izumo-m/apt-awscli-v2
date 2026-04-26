@@ -296,6 +296,18 @@ export function getLambdaName(): string {
 }
 
 /**
+ * Return the SSM parameter name holding the Cloudflare Lambda token.
+ * Mirrors the default in pulumi/src/config.ts: explicit override via
+ * aptAwscliV2:cloudflareSsmParam, otherwise `/${resourcePrefix}/cloudflare`.
+ */
+export function getCloudflareSsmParamName(): string {
+    const explicit = getConfig("aptAwscliV2:cloudflareSsmParam");
+    if (explicit) return explicit;
+    const prefix = getConfig("aptAwscliV2:resourcePrefix") || "apt-awscli-v2";
+    return `/${prefix}/cloudflare`;
+}
+
+/**
  * Add middleware to an AWS SDK client that prefixes error messages with
  * "AWS:<Service>:<Operation>: " on failure.
  * Example: addErrorContext(client)  →  "AWS:Lambda:Invoke: The security token ..."
