@@ -191,6 +191,49 @@ cd ../pulumi
 pulumi up
 ```
 
+## Security Audit
+
+Check `Cargo.lock` against the [RustSec Advisory Database](https://rustsec.org/) for known vulnerabilities.
+
+```bash
+# Install once
+cargo install cargo-audit
+
+# Run audit
+cargo audit
+```
+
+### Remediation
+
+If a vulnerability is reported, update the affected crate. `cargo audit` itself
+does not modify `Cargo.lock`; use `cargo update` to apply fixes.
+
+```bash
+# Update a specific crate within the version range in Cargo.toml
+cargo update -p <crate-name>
+
+# Pin to an exact version (avoids pulling in unrelated transitive updates)
+cargo update -p <crate-name> --precise <version>
+
+# To bump a major version that exceeds the Cargo.toml range, edit Cargo.toml manually
+```
+
+After updating `Cargo.lock`, follow the same verification steps as in [Updating Dependencies](#updating-dependencies)
+(`cargo test` → `cargo make build` → `pulumi up`).
+
+> Note: `cargo audit fix` exists but is gated behind an experimental
+> `--features=fix` install flag and rewrites `Cargo.toml` directly. The standard
+> practice in the Rust ecosystem is `cargo audit` for detection plus
+> `cargo update -p` (or Dependabot PRs) for remediation, which is why it is
+> recommended here. Consider [`cargo-deny`](https://github.com/EmbarkStudios/cargo-deny)
+> if license / banned-crate / duplicate-dependency checks are also needed.
+
+### Ignoring Advisories
+
+Advisories without an upstream fix, or whose threat model does not apply to
+this Lambda, are listed in `.cargo/audit.toml` with a justification comment.
+Add new entries only with a clear reason and a re-evaluation trigger.
+
 ## Local Execution
 
 Run the Lambda locally using the `cargo lambda` emulator.

@@ -20,9 +20,13 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
 # AWS SDK
-aws-config = { version = "1", features = ["behavior-version-latest"] }
-aws-sdk-s3 = "1"
-aws-sdk-ssm = "1"
+# default-features = false + explicit feature list selects only the modern
+# rustls 0.23 path (`default-https-client`). The legacy `rustls` feature on
+# these crates pulls in rustls 0.21 / rustls-webpki 0.101, which RustSec has
+# flagged with multiple advisories.
+aws-config = { version = "1", default-features = false, features = ["behavior-version-latest", "default-https-client", "rt-tokio", "credentials-process"] }
+aws-sdk-s3 = { version = "1", default-features = false, features = ["sigv4a", "http-1x", "default-https-client", "rt-tokio"] }
+aws-sdk-ssm = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio"] }
 
 # HTTP / download
 reqwest = { version = "0.13", default-features = false, features = ["stream", "blocking", "rustls", "rustls-native-certs"] }
