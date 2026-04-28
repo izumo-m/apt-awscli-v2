@@ -1,0 +1,19 @@
+[advisories]
+ignore = [
+    # RUSTSEC-2023-0071: Marvin Attack against `rsa`
+    #
+    # Pulled in via `pgp` -> `rsa`. The `rsa` crate has no fixed release as of
+    # this writing (long-standing upstream issue). The vulnerability is a
+    # timing side-channel that requires precise network-side timing
+    # observation of RSA decryption operations.
+    #
+    # In this Lambda, `pgp` is used only to *sign* the APT repository
+    # `Release` file with a private key (RSA decryption is not performed on
+    # network-received ciphertext). The signing key never participates in a
+    # network handshake observable by an attacker, so the Marvin Attack
+    # threat model does not apply.
+    #
+    # Re-evaluate when the `rsa` crate ships a fix or when an alternative
+    # OpenPGP crate is adopted.
+    "RUSTSEC-2023-0071",
+]
