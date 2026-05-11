@@ -1,6 +1,6 @@
 {
   "name": "apt-awscli-v2-pulumi",
-  "version": "1.7.2",
+  "version": "1.8.0",
   "scripts": {
     "bootstrap": "ts-node scripts/bootstrap.ts",
     "build": "tsc",
@@ -19,21 +19,21 @@
     "cf-purge": "ts-node scripts/cf-purge.ts"
   },
   "dependencies": {
-    "@aws-sdk/client-cloudwatch-logs": "^3.1043.0",
-    "@aws-sdk/client-lambda": "^3.1043.0",
-    "@aws-sdk/client-s3": "^3.1043.0",
-    "@aws-sdk/client-sns": "^3.1043.0",
-    "@aws-sdk/client-ssm": "^3.1043.0",
-    "@pulumi/aws": "^7.28.0",
+    "@aws-sdk/client-cloudwatch-logs": "^3.1045.0",
+    "@aws-sdk/client-lambda": "^3.1045.0",
+    "@aws-sdk/client-s3": "^3.1045.0",
+    "@aws-sdk/client-sns": "^3.1045.0",
+    "@aws-sdk/client-ssm": "^3.1045.0",
+    "@pulumi/aws": "^7.29.0",
     "@pulumi/cloudflare": "^6.15.0",
-    "@pulumi/pulumi": "^3.235.0",
+    "@pulumi/pulumi": "^3.237.0",
     "js-yaml": "^4.1.1",
     "marked": "^18.0.3",
     "openpgp": "^6.3.0"
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.7.0",
     "ts-node": "^10.9.2",
     "typescript": "^6.0.3"
   }
