@@ -1,9 +1,44 @@
 #!/bin/bash
 set -e
 
+# Create /usr/bin/aws and /usr/bin/aws_completer symlinks only if the paths are
+# free. If another package (e.g. Ubuntu's awscli) or a manual install already
+# owns those paths, leave them alone — awscli-v2 is still reachable directly at
+# /opt/awscli-v2/bin/aws.
 if [ "$1" = "configure" ]; then
-    # If the zip version is installed in /usr/local/bin, it may take precedence
-    # over /usr/bin/aws due to PATH priority, so display a warning
+    for name in aws aws_completer; do
+        link="/usr/bin/$name"
+        target="/opt/awscli-v2/bin/$name"
+
+        if [ ! -e "$link" ] && [ ! -L "$link" ]; then
+            ln -s "$target" "$link"
+            continue
+        fi
+
+        current=""
+        if [ -L "$link" ]; then
+            current=$(readlink "$link")
+        fi
+        if [ "$current" = "$target" ]; then
+            continue
+        fi
+
+        echo "NOTE: $link already exists and was not replaced." >&2
+        echo "      awscli-v2 binary is available at $target" >&2
+        owner=$(dpkg-query -S "$link" 2>/dev/null | cut -d: -f1 | head -1 || true)
+        if [ -n "$owner" ]; then
+            echo "      To make awscli-v2 the default '$name' command:" >&2
+            echo "        sudo apt remove $owner && sudo apt install --reinstall awscli-v2" >&2
+        else
+            echo "      To make awscli-v2 the default '$name' command:" >&2
+            echo "        sudo rm $link && sudo apt install --reinstall awscli-v2" >&2
+        fi
+        echo "      Or prepend /opt/awscli-v2/bin to PATH." >&2
+    done
+
+    # /usr/local/bin is conventionally ahead of /usr/bin in PATH; warn if the
+    # zip installer's aws is present, since it would shadow whatever /usr/bin/aws
+    # resolves to.
     if [ -e /usr/local/bin/aws ]; then
         echo "WARNING: /usr/local/bin/aws exists and may take precedence over /usr/bin/aws." >&2
         echo "         If you previously installed AWS CLI v2 via the zip installer," >&2

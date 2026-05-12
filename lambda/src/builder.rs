@@ -8,6 +8,7 @@ use crate::deb;
 
 const CONTROL_TEMPLATE: &str = include_str!("../metadata/DEBIAN/control");
 const POSTINST: &str = include_str!("../metadata/DEBIAN/postinst");
+const PRERM: &str = include_str!("../metadata/DEBIAN/prerm");
 
 /// Build a .deb package for the given version and architecture. Returns true if a new deb was built.
 pub async fn build(config: &Config, version: &str, arch: &str) -> Result<bool> {
@@ -92,16 +93,16 @@ pub async fn build(config: &Config, version: &str, arch: &str) -> Result<bool> {
 
     info!("Extracted {} files to {opt_dir}", archive.len());
 
-    // Create symlinks in /usr/bin/ (included in data.tar.zst)
-    let usr_bin_dir = format!("{dist_dir}/usr/bin");
-    std::fs::create_dir_all(&usr_bin_dir)?;
+    // Create /opt/awscli-v2/bin/ with relative symlinks to the launchers above.
+    // This directory is intended to be prepended to PATH for switching between
+    // alternative aws implementations (e.g., Ubuntu's awscli, /usr/local/bin/aws).
+    // /usr/bin/aws itself is not shipped in data.tar — postinst manages it.
+    let bin_dir = format!("{opt_dir}/bin");
+    std::fs::create_dir_all(&bin_dir)?;
     #[cfg(unix)]
     {
-        std::os::unix::fs::symlink("/opt/awscli-v2/aws", format!("{usr_bin_dir}/aws"))?;
-        std::os::unix::fs::symlink(
-            "/opt/awscli-v2/aws_completer",
-            format!("{usr_bin_dir}/aws_completer"),
-        )?;
+        std::os::unix::fs::symlink("../aws", format!("{bin_dir}/aws"))?;
+        std::os::unix::fs::symlink("../aws_completer", format!("{bin_dir}/aws_completer"))?;
     }
 
     // Create DEBIAN directory with control files
@@ -116,15 +117,18 @@ pub async fn build(config: &Config, version: &str, arch: &str) -> Result<bool> {
         .replace("${APT_AWSCLI_V2_EMAIL}", &config.email);
     std::fs::write(format!("{debian_dir}/control"), &control)?;
 
-    // Write postinst script
+    // Write postinst and prerm scripts
     std::fs::write(format!("{debian_dir}/postinst"), POSTINST)?;
+    std::fs::write(format!("{debian_dir}/prerm"), PRERM)?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(
-            format!("{debian_dir}/postinst"),
-            std::fs::Permissions::from_mode(0o755),
-        )?;
+        for script in ["postinst", "prerm"] {
+            std::fs::set_permissions(
+                format!("{debian_dir}/{script}"),
+                std::fs::Permissions::from_mode(0o755),
+            )?;
+        }
     }
 
     // Build deb

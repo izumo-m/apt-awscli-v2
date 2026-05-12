@@ -203,6 +203,9 @@ cargo install cargo-audit
 cargo audit
 ```
 
+If no `error:` or `warning:` lines are printed, no actionable advisories were found
+(recent `cargo-audit` versions stop after the `Scanning Cargo.lock ...` line on a clean run).
+
 ### Remediation
 
 If a vulnerability is reported, update the affected crate. `cargo audit` itself

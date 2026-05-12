@@ -1,0 +1,17 @@
+#!/bin/bash
+set -e
+
+# On remove (not upgrade), drop the /usr/bin symlinks that postinst created.
+# Only touch them if they still point at our /opt/awscli-v2/bin targets — leave
+# anything else (Ubuntu's awscli file, manual installs, other packages) alone.
+if [ "$1" = "remove" ]; then
+    for name in aws aws_completer; do
+        link="/usr/bin/$name"
+        target="/opt/awscli-v2/bin/$name"
+        if [ -L "$link" ] && [ "$(readlink "$link")" = "$target" ]; then
+            rm -f "$link"
+        fi
+    done
+fi
+
+exit 0
