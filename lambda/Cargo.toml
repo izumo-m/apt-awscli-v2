@@ -29,7 +29,10 @@ aws-sdk-s3 = { version = "1", default-features = false, features = ["sigv4a", "h
 aws-sdk-ssm = { version = "1", default-features = false, features = ["default-https-client", "rt-tokio"] }
 
 # HTTP / download
-reqwest = { version = "0.13", default-features = false, features = ["stream", "blocking", "rustls", "rustls-native-certs"] }
+# `rustls-native-certs` was removed in reqwest 0.13.3 (the AWS CLI download
+# origin, GitHub, and Cloudflare API all chain to well-known public CAs that
+# the bundled webpki-roots cover).
+reqwest = { version = "0.13", default-features = false, features = ["stream", "blocking", "rustls"] }
 
 # Archive operations
 zip = "8"

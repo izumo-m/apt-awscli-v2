@@ -10,7 +10,9 @@ use crate::config::{Config, Package};
 use crate::{apt_index, s3_sync, sign};
 
 /// Deploy all packages: prune old versions, regenerate indexes, sign, and sync to S3.
-/// `packages_with_dates` is a list of (package, release_date) pairs.
+/// `packages_with_dates` is a list of (package, version, release_date) tuples;
+/// the version string is currently unused in this function but is part of the
+/// shared bundle the caller assembles for both the deploy path and the response.
 pub async fn deploy_all(
     config: &Config,
     s3_client: &S3Client,
@@ -22,18 +24,26 @@ pub async fn deploy_all(
     // Load signer once (single SSM access)
     let signer = sign::Signer::from_ssm(ssm_client, &config.ssm_param).await?;
 
-    // Generate public.key if not present (first run or empty S3)
+    // Always derive the current public key from the signer so that an SSM key
+    // rotation is re-published automatically. The previous version only wrote
+    // public.key when missing, which left the old key in S3 after a rotation
+    // and caused APT signature failures. We still avoid touching the file when
+    // the content is unchanged to keep S3 sync and Cloudflare purge quiet.
     let public_key_path = format!("{repo_dir}/public.key");
-    if !Path::new(&public_key_path).exists() {
-        info!("public.key not found, extracting from private key...");
-        let public_key = signer.public_key_armored()?;
-        std::fs::write(&public_key_path, public_key).context("Failed to write public.key")?;
-        info!("public.key written to {public_key_path}");
+    let new_public_key = signer.public_key_armored()?;
+    let needs_write = match std::fs::read_to_string(&public_key_path) {
+        Ok(existing) => existing != new_public_key,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => true,
+        Err(e) => return Err(e).context("Failed to read existing public.key"),
+    };
+    if needs_write {
+        info!("Writing public.key to {public_key_path}");
+        std::fs::write(&public_key_path, &new_public_key).context("Failed to write public.key")?;
     }
 
     // Per-package: prune and collect pool dirs
     let mut pool_dirs: Vec<(String, String)> = Vec::new(); // (pool_dir, pool_relative)
-    for (pkg, _, _release_date) in packages_with_dates {
+    for (pkg, _version, _release_date) in packages_with_dates {
         let file_prefix = pkg.file_prefix();
         let pool_dir = config.pool_dir(file_prefix);
         let pool_relative = config.pool_relative(file_prefix);
@@ -89,7 +99,7 @@ pub async fn deploy_all(
         signer.clearsign(&release_path, &inrelease_path)?;
     }
 
-    // 5. Sync to S3 (once for all packages)
+    // Sync to S3 (once for all packages)
     info!("Syncing to S3...");
     let metadata_rules = [
         // .deb packages are immutable since the filename includes the version
@@ -149,11 +159,9 @@ pub async fn deploy_all(
         .await?;
         let mut keys = upload_result.uploaded;
         keys.extend(upload_result.deleted);
-        if !keys.is_empty() {
-            purger
-                .purge_keys(&keys, config.s3_prefix.as_deref())
-                .await?;
-        }
+        purger
+            .purge_keys(&keys, config.s3_prefix.as_deref())
+            .await?;
     }
 
     info!("Deploy complete.");
@@ -181,7 +189,7 @@ fn prune_old_versions(pool_dir: &str, arch: &str, max_versions: usize) -> Result
     }
 
     // Sort by version (natural sort - deb names are {pkg_prefix}_{version}-1_{arch}.deb)
-    debs.sort_by(|a, b| version_sort_key(a).cmp(&version_sort_key(b)));
+    debs.sort_by_key(|a| version_sort_key(a));
 
     let to_remove = debs.len() - max_versions;
     for deb_name in debs.iter().take(to_remove) {
@@ -194,8 +202,8 @@ fn prune_old_versions(pool_dir: &str, arch: &str, max_versions: usize) -> Result
 }
 
 /// Extract a sortable version key from a deb filename.
-/// awscli-v2_2.15.30-1_amd64.deb -> (2, 15, 30)
-/// session-manager-plugin_1.2.707.0-1_amd64.deb -> (1, 2, 707, 0)
+/// awscli-v2_2.15.30-1_amd64.deb -> [2, 15, 30]
+/// session-manager-plugin_1.2.707.0-1_amd64.deb -> [1, 2, 707, 0]
 fn version_sort_key(deb_name: &str) -> Vec<u64> {
     // Extract version part: between first '_' and '-1_'
     let parts: Vec<&str> = deb_name.splitn(2, '_').collect();
@@ -239,7 +247,7 @@ mod tests {
             "awscli-v2_2.9.1-1_amd64.deb".to_string(),
             "awscli-v2_2.15.2-1_amd64.deb".to_string(),
         ];
-        debs.sort_by(|a, b| version_sort_key(a).cmp(&version_sort_key(b)));
+        debs.sort_by_key(|a| version_sort_key(a));
         assert_eq!(
             debs,
             vec![

@@ -3,7 +3,7 @@
  *
  * Environment:
  *   ORIGIN_BASE_URL - origin URL
- *                     例: https://my-bucket.s3.ap-northeast-1.amazonaws.com/prefix
+ *                     Example: https://my-bucket.s3.ap-northeast-1.amazonaws.com/prefix
  */
 
 export default {
@@ -12,18 +12,28 @@ export default {
       return new Response("Method Not Allowed", { status: 405 });
     }
 
+    if (!env.ORIGIN_BASE_URL) {
+      return new Response("ORIGIN_BASE_URL not configured", { status: 500 });
+    }
+
     const { pathname, search } = new URL(request.url);
     const resolvedPath = pathname.endsWith("/") ? `${pathname}index.html` : pathname;
     const originUrl = `${env.ORIGIN_BASE_URL.replace(/\/+$/, "")}${resolvedPath}${search}`;
 
+    // Only forward the request headers we want S3 to see. Sending an explicit
+    // empty value (e.g. `If-None-Match: ""`) is not the same as omitting the
+    // header, so each conditional header is set only when the client actually
+    // supplied one. `Accept` falls back to */* so S3 always sees one.
+    const headers = new Headers();
+    headers.set("Accept", request.headers.get("Accept") || "*/*");
+    for (const name of ["Accept-Encoding", "If-None-Match", "If-Modified-Since"]) {
+      const value = request.headers.get(name);
+      if (value) headers.set(name, value);
+    }
+
     return fetch(originUrl, {
       method: request.method,
-      headers: {
-        "Accept": request.headers.get("Accept") || "*/*",
-        "Accept-Encoding": request.headers.get("Accept-Encoding") || "",
-        "If-None-Match": request.headers.get("If-None-Match") || "",
-        "If-Modified-Since": request.headers.get("If-Modified-Since") || "",
-      },
+      headers,
       cf: { cacheEverything: true },
     });
   },

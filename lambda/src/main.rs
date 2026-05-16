@@ -28,7 +28,7 @@ async fn handler(event: LambdaEvent<serde_json::Value>) -> Result<serde_json::Va
 async fn handler_inner(event: LambdaEvent<serde_json::Value>) -> Result<serde_json::Value, Error> {
     info!("Lambda handler started");
 
-    let force_deploy = event
+    let deploy_only = event
         .payload
         .get("deploy_only")
         .and_then(|v| v.as_bool())
@@ -68,11 +68,12 @@ async fn handler_inner(event: LambdaEvent<serde_json::Value>) -> Result<serde_js
     let s3_client = aws_sdk_s3::Client::from_conf(s3_config);
     let ssm_client = aws_sdk_ssm::Client::new(&aws_config);
 
-    // 3. Sync S3 -> local repo
+    // 3. Prepare local repo directory (the actual S3 -> local sync happens in
+    //    step 4 below, or in the deploy_only branch immediately below)
     let repo_dir = config.repo_dir();
     std::fs::create_dir_all(&repo_dir)?;
 
-    if force_deploy {
+    if deploy_only {
         // deploy_only: sync, regenerate indexes for all packages, sign, and sync back
         info!("deploy_only=true, syncing S3 -> {repo_dir}...");
         s3_sync::download(
@@ -99,7 +100,7 @@ async fn handler_inner(event: LambdaEvent<serde_json::Value>) -> Result<serde_js
         }));
     }
 
-    // 4. Sync S3 -> local  &  fetch all package versions in parallel
+    // 4. Sync S3 -> local & fetch all package versions in parallel
     info!("Syncing S3 -> {repo_dir} and fetching latest versions in parallel...");
 
     let has_awscli = config.packages.contains(&Package::AwsCli);

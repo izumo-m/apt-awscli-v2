@@ -110,6 +110,15 @@ fn prepare_dist(dist_dir: &str, arch: &str) -> Result<()> {
         if relative.is_empty() {
             continue;
         }
+        let rel_path = Path::new(relative);
+        if rel_path.components().any(|c| {
+            !matches!(
+                c,
+                std::path::Component::Normal(_) | std::path::Component::CurDir
+            )
+        }) {
+            anyhow::bail!("Refusing zip entry with unsafe path: {name}");
+        }
         let target = format!("{opt_dir}/{relative}");
         if file.is_dir() {
             std::fs::create_dir_all(&target)?;
@@ -145,13 +154,19 @@ fn prepare_dist(dist_dir: &str, arch: &str) -> Result<()> {
         format!("{debian_dir}/postinst"),
         include_str!("../metadata/DEBIAN/postinst"),
     )?;
+    std::fs::write(
+        format!("{debian_dir}/prerm"),
+        include_str!("../metadata/DEBIAN/prerm"),
+    )?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(
-            format!("{debian_dir}/postinst"),
-            std::fs::Permissions::from_mode(0o755),
-        )?;
+        for script in ["postinst", "prerm"] {
+            std::fs::set_permissions(
+                format!("{debian_dir}/{script}"),
+                std::fs::Permissions::from_mode(0o755),
+            )?;
+        }
     }
 
     eprintln!("Prepared dist: {dist_dir}");

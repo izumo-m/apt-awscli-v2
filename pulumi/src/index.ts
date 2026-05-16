@@ -10,6 +10,7 @@ import { createLambda }                                 from "./lambda";
 import { createNotification }                           from "./notification";
 import { createScheduler }                              from "./scheduler";
 import { createCloudflareWorker }                       from "./cloudflare";
+import { generateIndexHtml }                            from "./indexHtml";
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
@@ -18,9 +19,11 @@ const currentRegion = aws.getRegionOutput().name;
 
 // ─── Stack Config Backup ─────────────────────────────────────────────────────
 //
-// Back up Pulumi.{stack}.yaml to the Pulumi state bucket as a managed asset so
-// that (a) edits appear as a normal diff in `pulumi preview` and (b) the file
-// can be restored on another machine via `npm run restore-config <stack>`.
+// When the Pulumi backend is S3 (the supported deployment path for this
+// project), back up Pulumi.{stack}.yaml to that bucket as a managed asset
+// so that (a) edits appear as a normal diff in `pulumi preview` and (b) the
+// file can be restored on another machine via `npm run restore-config <stack>`.
+// For non-S3 backends (e.g. Pulumi Cloud) this block is skipped entirely.
 
 const backendUrl   = process.env["PULUMI_BACKEND_URL"] ?? "";
 const backendMatch = backendUrl.match(/^s3:\/\/([^/]+)/);
@@ -50,7 +53,6 @@ new GpgKeyInit(`${cfg.resourcePrefix}-gpg-key-init`, {
 const { bucket, logsBucket }           = createStorage(cfg);
 
 // ─── index.html (generated from README.md) ─────────────────────────────────
-import { generateIndexHtml } from "./indexHtml";
 generateIndexHtml();
 
 const { prefix: s3Prefix } = parseS3Uri(cfg.s3Uri);
@@ -69,9 +71,9 @@ const { lambdaFn, logGroup }           = createLambda(cfg, lambdaRole, lambdaRol
 if (cfg.enableScheduler) {
     createScheduler(cfg, lambdaFn);
 }
-const notification = cfg.notificationEmail
-    ? createNotification(cfg, cfg.notificationEmail, lambdaFn)
-    : undefined;
+if (cfg.notificationEmail) {
+    createNotification(cfg, cfg.notificationEmail, lambdaFn);
+}
 
 // ─── Cloudflare Worker (opt-in) ────────────────────────────────────────────
 // Requires CLOUDFLARE_API_TOKEN env var when cloudflareEnabled is true.

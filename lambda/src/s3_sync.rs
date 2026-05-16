@@ -83,11 +83,7 @@ pub async fn download(
                 }
             };
             if should_download {
-                Some((
-                    key.clone(),
-                    local_dir.join(&relative),
-                    remote.last_modified.clone(),
-                ))
+                Some((key.clone(), local_dir.join(&relative), remote.last_modified))
             } else {
                 None
             }
@@ -166,14 +162,12 @@ pub async fn upload(
     metadata_rules: &[MetadataRule],
 ) -> Result<UploadResult> {
     // Compile glob patterns (once)
-    let compiled: Vec<(Pattern, &ObjectMetadata)> = metadata_rules
-        .iter()
-        .map(|r| {
-            let pat = Pattern::new(&r.pattern)
-                .unwrap_or_else(|e| panic!("invalid glob pattern {:?}: {e}", r.pattern));
-            (pat, &r.metadata)
-        })
-        .collect();
+    let mut compiled: Vec<(Pattern, &ObjectMetadata)> = Vec::with_capacity(metadata_rules.len());
+    for r in metadata_rules {
+        let pat = Pattern::new(&r.pattern)
+            .with_context(|| format!("invalid glob pattern {:?}", r.pattern))?;
+        compiled.push((pat, &r.metadata));
+    }
 
     let remote_objects = list_objects(client, bucket, prefix).await?;
     let local_files = list_local_files(local_dir)?;
@@ -321,7 +315,7 @@ async fn list_objects(
                     key.to_string(),
                     ObjectMeta {
                         size,
-                        last_modified: last_modified.clone(),
+                        last_modified: *last_modified,
                     },
                 );
             }

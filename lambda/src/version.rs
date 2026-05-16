@@ -10,20 +10,15 @@ use regex::Regex;
 /// whereas the API would require multiple requests (tags + commits) to get the same
 /// information.
 pub async fn fetch_latest_version() -> Result<(String, DateTime<Utc>)> {
-    let html = reqwest::get("https://github.com/aws/aws-cli/tags")
-        .await
-        .context("Failed to fetch GitHub tags page")?
-        .text()
-        .await
-        .context("Failed to read GitHub tags response body")?;
-
+    let html = fetch_tags_html("https://github.com/aws/aws-cli/tags").await?;
     parse_latest_version(&html)
 }
 
 /// Parse the GitHub tags HTML and return the latest AWS CLI v2 version.
 fn parse_latest_version(html: &str) -> Result<(String, DateTime<Utc>)> {
-    let version_re = Regex::new(r"/aws/aws-cli/releases/tag/(2\.\d+\.\d+)")?;
-    parse_github_tags(html, &version_re, "No AWS CLI v2 version found")
+    let tag_re = Regex::new(r"/aws/aws-cli/releases/tag/([\w.+\-]+)")?;
+    let v2_re = Regex::new(r"^2\.\d+\.\d+$")?;
+    parse_github_tags(html, &tag_re, &v2_re, "No AWS CLI v2 version found")
 }
 
 /// Fetch the latest Session Manager Plugin version from GitHub tags.
@@ -31,40 +26,60 @@ fn parse_latest_version(html: &str) -> Result<(String, DateTime<Utc>)> {
 ///
 /// See [`fetch_latest_version`] for why we scrape HTML instead of using the API.
 pub async fn fetch_session_manager_plugin_version() -> Result<(String, DateTime<Utc>)> {
-    let html = reqwest::get("https://github.com/aws/session-manager-plugin/tags")
-        .await
-        .context("Failed to fetch Session Manager Plugin GitHub tags page")?
-        .text()
-        .await
-        .context("Failed to read Session Manager Plugin GitHub tags response body")?;
-
+    let html = fetch_tags_html("https://github.com/aws/session-manager-plugin/tags").await?;
     parse_session_manager_plugin_version(&html)
 }
 
 /// Parse the GitHub tags HTML and return the latest Session Manager Plugin version.
 fn parse_session_manager_plugin_version(html: &str) -> Result<(String, DateTime<Utc>)> {
-    let version_re = Regex::new(r"/aws/session-manager-plugin/releases/tag/(\d+\.\d+\.\d+\.\d+)")?;
-    parse_github_tags(html, &version_re, "No Session Manager Plugin version found")
+    let tag_re = Regex::new(r"/aws/session-manager-plugin/releases/tag/([\w.+\-]+)")?;
+    let smp_re = Regex::new(r"^\d+\.\d+\.\d+\.\d+$")?;
+    parse_github_tags(
+        html,
+        &tag_re,
+        &smp_re,
+        "No Session Manager Plugin version found",
+    )
+}
+
+/// GET a GitHub tags page and return its body, surfacing non-success HTTP
+/// statuses explicitly so we never silently parse an error page as empty HTML.
+async fn fetch_tags_html(url: &str) -> Result<String> {
+    let resp = reqwest::get(url)
+        .await
+        .with_context(|| format!("Failed to fetch {url}"))?;
+    let status = resp.status();
+    if !status.is_success() {
+        anyhow::bail!("Failed to fetch {url}: HTTP {status}");
+    }
+    resp.text()
+        .await
+        .with_context(|| format!("Failed to read response body from {url}"))
 }
 
 /// Scan a GitHub tags HTML page and return the first (latest) version with its release datetime.
 ///
-/// Matches version tags and `datetime` attributes in document order.
-/// When a version token is followed immediately by a datetime,
-/// that (version, datetime) pair is returned. A datetime that belongs to a different
-/// version (e.g. a 1.x entry interleaved with 2.x) resets the current candidate.
+/// `tag_re` is a permissive regex that captures every release-tag URL in the page (e.g. both
+/// `2.x.y` and `1.x.y` entries on the AWS CLI tags page). `version_filter` then decides which
+/// captured tags qualify.
+///
+/// We collect every tag and every `datetime="..."` attribute, sort by their byte positions to
+/// reconstruct document order, and walk them as a stream:
+///   - A tag that passes `version_filter` becomes the current candidate.
+///   - A tag that fails the filter clears the candidate — this is what prevents a neighbouring
+///     1.x entry's datetime from being misattributed to a 2.x tag we just saw.
+///   - The first datetime encountered while a candidate is set is returned with that candidate.
 fn parse_github_tags(
     html: &str,
-    version_re: &Regex,
+    tag_re: &Regex,
+    version_filter: &Regex,
     not_found_msg: &str,
 ) -> Result<(String, DateTime<Utc>)> {
     let datetime_re = Regex::new(r#"datetime="([^"]+)""#)?;
 
-    // Collect version and datetime tokens with their byte positions, then sort by position
-    // to reconstruct document order regardless of which regex matched first.
     let mut entries: Vec<(usize, Token)> = Vec::new();
 
-    for cap in version_re.captures_iter(html) {
+    for cap in tag_re.captures_iter(html) {
         let m = cap.get(1).unwrap();
         entries.push((m.start(), Token::Version(m.as_str().to_string())));
     }
@@ -75,25 +90,24 @@ fn parse_github_tags(
 
     entries.sort_by_key(|(pos, _)| *pos);
 
-    // Walk tokens: remember the most recent version tag; when we see a datetime,
-    // return the remembered version.
-    // A datetime that does not follow a version (i.e. belongs to another tag) clears
-    // the candidate so we don't misattribute it.
     let mut current_tag: Option<String> = None;
 
     for (_, token) in entries {
         match token {
             Token::Version(v) => {
-                current_tag = Some(v);
+                if version_filter.is_match(&v) {
+                    current_tag = Some(v);
+                } else {
+                    current_tag = None;
+                }
             }
             Token::Datetime(dt) => {
-                if let Some(ref tag) = current_tag {
+                if let Some(tag) = current_tag.take() {
                     let released_at = dt
                         .parse::<DateTime<Utc>>()
                         .with_context(|| format!("Failed to parse datetime: {dt}"))?;
-                    return Ok((tag.clone(), released_at));
+                    return Ok((tag, released_at));
                 }
-                current_tag = None;
             }
         }
     }
@@ -175,14 +189,41 @@ mod tests {
     }
 
     #[test]
-    fn v1x_datetime_not_attributed_to_v2x() {
-        // 2.x tag followed by 1.x datetime: the datetime belongs to 1.x,
-        // so 2.x should not pick it up. But 2.x has no datetime of its own,
-        // so only 1.x's datetime resets the candidate.
+    fn only_1x_in_html_returns_err() {
+        // A page containing only 1.x tags should not yield any 2.x result.
         let now = Utc::now();
         let html = awscli_html(&[("1.44.39", now - Duration::hours(72))]);
         let result = parse_latest_version(&html);
         assert!(result.is_err(), "Should not return 1.x version");
+    }
+
+    #[test]
+    fn intervening_1x_tag_clears_2x_candidate() {
+        // Hypothetical layout where a 1.x tag sits between a 2.x tag and the
+        // next datetime. Without the "clear on non-matching tag" rule, that
+        // datetime would be misattributed to 2.x.
+        let now = Utc::now();
+        let html = format!(
+            "<html><body>\n\
+             <a href=\"/aws/aws-cli/releases/tag/2.33.22\">2.33.22</a>\n\
+             <a href=\"/aws/aws-cli/releases/tag/1.44.39\">1.44.39</a>\n\
+             <relative-time datetime=\"{}\">x</relative-time>\n\
+             </body></html>",
+            fmt(now - Duration::hours(48))
+        );
+        assert!(parse_latest_version(&html).is_err());
+    }
+
+    #[test]
+    fn pre_release_2x_tag_is_skipped() {
+        // A 2.x.y-pre tag must not be returned as a stable 2.x.y version.
+        let now = Utc::now();
+        let html = awscli_html(&[
+            ("2.99.0-pre", now - Duration::hours(1)),
+            ("2.33.21", now - Duration::hours(48)),
+        ]);
+        let (ver, _) = parse_latest_version(&html).unwrap();
+        assert_eq!(ver, "2.33.21");
     }
 
     #[test]

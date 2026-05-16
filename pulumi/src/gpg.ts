@@ -16,7 +16,11 @@ export interface GpgKeyInitInputs {
 
 const gpgKeyInitProvider: pulumi.dynamic.ResourceProvider = {
     async create(inputs: GpgKeyInitInputs): Promise<pulumi.dynamic.CreateResult> {
-        // Dynamic providers run serialized — use require() for external modules.
+        // Pulumi serialises the provider's methods (`toString()`-ed) and
+        // re-invokes them in a separate Node context that does NOT inherit
+        // the surrounding module's top-level imports. Resolving these via
+        // require() inside the function body is the supported way to access
+        // dependencies from within a dynamic provider.
         const {
             SSMClient,
             DescribeParametersCommand,

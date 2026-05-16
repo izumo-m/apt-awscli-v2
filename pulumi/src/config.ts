@@ -6,18 +6,43 @@ export type LambdaArch = "x86_64" | "arm64";
 const VALID_APT_ARCHES:    AptArch[]    = ["amd64", "arm64"];
 const VALID_LAMBDA_ARCHES: LambdaArch[] = ["x86_64", "arm64"];
 
-function validateAptArches(values: string[]): AptArch[] {
+// `getObject<string[]>` only enforces the type at compile time — if a user
+// writes `aptArches: "amd64"` in YAML, Pulumi happily returns the string
+// typed as `string[]`. These validators check the runtime shape so an
+// out-of-shape value fails fast at `pulumi up` with a clear message instead
+// of crashing later (or worse, treating the string as an array of letters).
+
+export function validateAptArches(values: unknown): AptArch[] {
+    if (!Array.isArray(values)) {
+        throw new Error(
+            `aptArches must be a list (e.g. [amd64, arm64]); got: ${JSON.stringify(values)}`
+        );
+    }
     for (const v of values) {
-        if (!VALID_APT_ARCHES.includes(v as AptArch)) {
+        if (typeof v !== "string" || !VALID_APT_ARCHES.includes(v as AptArch)) {
             throw new Error(
-                `Invalid aptArches value: "${v}". Must be one of: ${VALID_APT_ARCHES.join(", ")}`
+                `Invalid aptArches value: ${JSON.stringify(v)}. Must be one of: ${VALID_APT_ARCHES.join(", ")}`
             );
         }
     }
     return values as AptArch[];
 }
 
-function validateLambdaArch(value: string): LambdaArch {
+export function validateAptPackages(values: unknown): string[] {
+    if (!Array.isArray(values)) {
+        throw new Error(
+            `aptPackages must be a list (e.g. [aws-cli, session-manager-plugin]); got: ${JSON.stringify(values)}`
+        );
+    }
+    for (const v of values) {
+        if (typeof v !== "string") {
+            throw new Error(`Invalid aptPackages entry: ${JSON.stringify(v)}`);
+        }
+    }
+    return values as string[];
+}
+
+export function validateLambdaArch(value: string): LambdaArch {
     if (!VALID_LAMBDA_ARCHES.includes(value as LambdaArch)) {
         throw new Error(
             `Invalid lambdaArch value: "${value}". Must be one of: ${VALID_LAMBDA_ARCHES.join(", ")}`
@@ -84,7 +109,7 @@ export function loadConfig(): AppConfig {
         ssmParamName:           config.get("ssmParamName") ?? `/${resourcePrefix}/private.key`,
         maxVersions:            config.getNumber("maxVersions") ?? -1,
         aptArches:              validateAptArches(config.getObject<string[]>("aptArches") ?? ["amd64"]),
-        aptPackages:            config.getObject<string[]>("aptPackages") ?? ["aws-cli", "session-manager-plugin"],
+        aptPackages:            validateAptPackages(config.getObject<string[]>("aptPackages") ?? ["aws-cli", "session-manager-plugin"]),
         lambdaArch:             validateLambdaArch(config.get("lambdaArch") ?? "arm64"),
         lambdaMemorySize:       config.getNumber("lambdaMemorySize")       ?? 5120,
         lambdaEphemeralStorage: config.getNumber("lambdaEphemeralStorage") ?? 512,

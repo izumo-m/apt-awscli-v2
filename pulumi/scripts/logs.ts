@@ -21,8 +21,13 @@ const follow = args.includes("--follow");
 let sinceMins = 10;
 const sinceIdx = args.indexOf("--since");
 if (sinceIdx !== -1 && args[sinceIdx + 1]) {
-    const parsed = parseInt(args[sinceIdx + 1], 10);
-    if (!isNaN(parsed)) sinceMins = parsed;
+    const raw    = args[sinceIdx + 1];
+    const parsed = parseInt(raw, 10);
+    if (isNaN(parsed) || parsed <= 0) {
+        process.stderr.write(`Error: --since must be a positive integer (minutes), got "${raw}".\n`);
+        process.exit(1);
+    }
+    sinceMins = parsed;
 }
 
 // ─── Main ──────────────────────────────────────────────────────────────────────

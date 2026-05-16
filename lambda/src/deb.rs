@@ -82,7 +82,7 @@ fn add_dir_to_tar<W: Write>(
     base: &Path,
     exclude: Option<&str>,
 ) -> Result<()> {
-    let mut entries: Vec<_> = std::fs::read_dir(dir)?.filter_map(|e| e.ok()).collect();
+    let mut entries: Vec<_> = std::fs::read_dir(dir)?.collect::<std::io::Result<Vec<_>>>()?;
     entries.sort_by_key(|e| e.file_name());
 
     for entry in entries {
@@ -111,7 +111,11 @@ fn add_dir_to_tar<W: Write>(
             header.set_cksum();
             builder.append_link(&mut header, &archive_path, &link_target)?;
 
-            // Do not recurse into symlinked directories
+            // Defensively skip the rest of the iteration for a symlink target
+            // that happens to be a directory. Recursion only lives in the
+            // `else if path.is_dir()` arm below, so today this is a no-op —
+            // but keeping the continue makes the intent ("never traverse into
+            // a symlinked directory") explicit if more code is added later.
             if path.is_dir() {
                 continue;
             }
