@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::{Context, Result};
 
 /// Working directory for temporary files (Lambda only allows /tmp)
@@ -16,8 +18,12 @@ impl Package {
             Package::SessionManagerPlugin => "session-manager-plugin",
         }
     }
+}
 
-    pub fn from_str(s: &str) -> Result<Self> {
+impl FromStr for Package {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self> {
         match s.trim() {
             "aws-cli" => Ok(Package::AwsCli),
             "session-manager-plugin" => Ok(Package::SessionManagerPlugin),
@@ -70,22 +76,50 @@ impl Config {
         let email = require_env("APT_AWSCLI_V2_EMAIL")?;
         let name = require_env("APT_AWSCLI_V2_NAME")?;
 
-        let max_versions = opt_env("APT_AWSCLI_V2_MAX_VERSIONS")
-            .map(|s| s.parse::<i64>())
-            .transpose()
-            .context("APT_AWSCLI_V2_MAX_VERSIONS is not a valid number")?
-            .and_then(|n| if n == -1 { None } else { Some(n as usize) });
+        // -1 means "no limit"; any non-positive value other than -1 is rejected to
+        // avoid silently wiping the pool (max_versions=0) or wrapping negatives into
+        // a huge usize via `as` cast.
+        let max_versions = match opt_env("APT_AWSCLI_V2_MAX_VERSIONS") {
+            None => None,
+            Some(s) => {
+                let n: i64 = s
+                    .parse()
+                    .context("APT_AWSCLI_V2_MAX_VERSIONS is not a valid number")?;
+                if n == -1 {
+                    None
+                } else if n < 1 {
+                    anyhow::bail!(
+                        "APT_AWSCLI_V2_MAX_VERSIONS must be -1 (unlimited) or >= 1, got {n}"
+                    );
+                } else {
+                    Some(n as usize)
+                }
+            }
+        };
 
-        let archs = opt_env("APT_AWSCLI_V2_ARCHS")
-            .map(|s| s.split(',').map(|a| a.trim().to_string()).collect())
+        let archs: Vec<String> = opt_env("APT_AWSCLI_V2_ARCHS")
+            .map(|s| {
+                s.split(',')
+                    .map(|a| a.trim().to_string())
+                    .filter(|a| !a.is_empty())
+                    .collect()
+            })
             .unwrap_or_else(|| vec!["amd64".to_string()]);
+        if archs.is_empty() {
+            anyhow::bail!("APT_AWSCLI_V2_ARCHS must contain at least one architecture");
+        }
 
-        let packages = opt_env("APT_AWSCLI_V2_PACKAGES")
+        let packages: Vec<Package> = opt_env("APT_AWSCLI_V2_PACKAGES")
             .unwrap_or_else(|| "aws-cli".to_string())
             .split(',')
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
             .map(Package::from_str)
-            .collect::<Result<Vec<_>>>()
+            .collect::<Result<Vec<_>, _>>()
             .context("APT_AWSCLI_V2_PACKAGES contains an unknown package")?;
+        if packages.is_empty() {
+            anyhow::bail!("APT_AWSCLI_V2_PACKAGES must contain at least one package");
+        }
 
         let threads = opt_env("APT_AWSCLI_V2_THREADS")
             .and_then(|s| s.parse::<usize>().ok())
@@ -159,14 +193,6 @@ impl Config {
     /// Path to the dist (staging) directory
     pub fn dist_dir(&self) -> String {
         format!("{}/dist", WORKDIR)
-    }
-
-    /// S3 key for a given relative path within the repo
-    pub fn s3_key(&self, relative_path: &str) -> String {
-        match &self.s3_prefix {
-            Some(prefix) => format!("{}/{}", prefix, relative_path),
-            None => relative_path.to_string(),
-        }
     }
 }
 

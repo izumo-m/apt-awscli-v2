@@ -69,6 +69,19 @@ pub async fn build(config: &Config, version: &str, arch: &str) -> Result<bool> {
             continue;
         }
 
+        // Reject zip entries that would escape opt_dir (Zip Slip).
+        // The upstream AWS CLI zip is trusted, but a malformed/tampered archive
+        // could otherwise write outside the staging area.
+        let rel_path = Path::new(relative);
+        if rel_path.components().any(|c| {
+            !matches!(
+                c,
+                std::path::Component::Normal(_) | std::path::Component::CurDir
+            )
+        }) {
+            anyhow::bail!("Refusing zip entry with unsafe path: {name}");
+        }
+
         let target = format!("{opt_dir}/{relative}");
 
         if file.is_dir() {

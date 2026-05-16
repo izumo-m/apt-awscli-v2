@@ -15,7 +15,7 @@ pub fn generate_packages(
     pool_entries: &[(&str, &str)],
     binary_arch_dir: &str,
     arch: &str,
-) -> Result<String> {
+) -> Result<()> {
     let suffix = format!("_{arch}.deb");
 
     // Parse existing Packages file to reuse cached entries
@@ -94,7 +94,7 @@ pub fn generate_packages(
     let compressed = encoder.finish()?;
     std::fs::write(&packages_gz_path, &compressed)?;
 
-    Ok(packages_content)
+    Ok(())
 }
 
 /// Parse a Packages file into a map of Filename -> full entry text.
@@ -172,7 +172,14 @@ fn scan_deb(deb_path: &str, file_size: u64) -> Result<DebMetadata> {
 }
 
 /// Extract the control file content from a .deb archive.
-/// deb = ar archive containing control.tar.{zst,gz,xz} which contains ./control
+///
+/// A .deb is an `ar` archive whose `control.tar.*` member contains the `./control`
+/// text file. Only the two compressions actually shipped today are supported:
+///
+/// - `control.tar.zst` — produced by this Lambda's deb builder (zstd)
+/// - `control.tar.gz`  — used by the upstream Session Manager Plugin .deb
+///
+/// If a future input uses a different compression (e.g. xz), add it here.
 fn extract_control_from_deb(deb_data: &[u8]) -> Result<String> {
     let cursor = std::io::Cursor::new(deb_data);
     let mut ar_archive = ar::Archive::new(cursor);
