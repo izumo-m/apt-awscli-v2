@@ -105,8 +105,10 @@ export function createCloudflareWorker(cfg: AppConfig): CloudflareResult {
  *   https://<bucket>.s3.amazonaws.com/<prefix>
  * which works regardless of region. Cloudflare follows the 307 redirect
  * to the regional endpoint on first request.
+ *
+ * Exported for unit testing only.
  */
-function deriveOriginUrl(s3Uri: string): string {
+export function deriveOriginUrl(s3Uri: string): string {
     const m = s3Uri.match(/^s3:\/\/([^/]+)(?:\/(.*))?$/);
     if (!m) throw new Error(`Invalid s3Uri: ${s3Uri}`);
     const bucket = m[1];

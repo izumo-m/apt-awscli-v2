@@ -16,7 +16,8 @@
     "generate-index-html": "ts-node scripts/generate-index-html.ts",
     "cf-config:set": "ts-node scripts/cf-config.ts set",
     "cf-config:show": "ts-node scripts/cf-config.ts show",
-    "cf-purge": "ts-node scripts/cf-purge.ts"
+    "cf-purge": "ts-node scripts/cf-purge.ts",
+    "test": "vitest run"
   },
   "dependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.1045.0",
@@ -35,6 +36,7 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25.7.0",
     "ts-node": "^10.9.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
   }
 }

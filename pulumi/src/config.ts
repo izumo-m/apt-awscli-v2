@@ -12,7 +12,7 @@ const VALID_LAMBDA_ARCHES: LambdaArch[] = ["x86_64", "arm64"];
 // out-of-shape value fails fast at `pulumi up` with a clear message instead
 // of crashing later (or worse, treating the string as an array of letters).
 
-function validateAptArches(values: unknown): AptArch[] {
+export function validateAptArches(values: unknown): AptArch[] {
     if (!Array.isArray(values)) {
         throw new Error(
             `aptArches must be a list (e.g. [amd64, arm64]); got: ${JSON.stringify(values)}`
@@ -28,7 +28,7 @@ function validateAptArches(values: unknown): AptArch[] {
     return values as AptArch[];
 }
 
-function validateAptPackages(values: unknown): string[] {
+export function validateAptPackages(values: unknown): string[] {
     if (!Array.isArray(values)) {
         throw new Error(
             `aptPackages must be a list (e.g. [aws-cli, session-manager-plugin]); got: ${JSON.stringify(values)}`
@@ -42,7 +42,7 @@ function validateAptPackages(values: unknown): string[] {
     return values as string[];
 }
 
-function validateLambdaArch(value: string): LambdaArch {
+export function validateLambdaArch(value: string): LambdaArch {
     if (!VALID_LAMBDA_ARCHES.includes(value as LambdaArch)) {
         throw new Error(
             `Invalid lambdaArch value: "${value}". Must be one of: ${VALID_LAMBDA_ARCHES.join(", ")}`

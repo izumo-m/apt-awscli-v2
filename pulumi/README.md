@@ -465,6 +465,22 @@ npm run generate-index-html
 | `npm run cf-config:show` | Read back Cloudflare credentials from SSM (token redacted) |
 | `npm run cf-purge -- --prefix <path>` | Manually purge Cloudflare cache under a path prefix |
 | `npm run cf-purge -- --all` | Manually purge the entire Cloudflare zone |
+| `npm test` | Run pure-function unit tests (vitest) |
+
+## Tests
+
+Pure-function unit tests live under `pulumi/tests/` and run with [vitest](https://vitest.dev/):
+
+```bash
+cd pulumi
+npm test
+```
+
+They cover the helpers that are easy to exercise in isolation
+(`parseS3Uri`, `deriveOriginUrl`, `validateAptArches`, `validateAptPackages`,
+`validateLambdaArch`, `resolvePublicBaseUrl`). Pulumi resource construction
+is not unit-tested — `pulumi preview` against a dev stack is the integration
+test for that path.
 
 ## Pulumi Config Key Reference
 
