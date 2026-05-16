@@ -28,9 +28,10 @@ sudo apt install session-manager-plugin
 
 The `awscli-v2` package extracts AWS CLI v2 under `/opt/awscli-v2/` and exposes
 its launchers via relative symlinks at `/opt/awscli-v2/bin/{aws,aws_completer}`.
-A convenience symlink at `/usr/bin/aws` is created **only if that path is free**
-(see the coexistence section below). The `/opt/awscli-v2/bin/aws` path always
-works regardless of what else is on the system.
+Convenience symlinks at `/usr/bin/aws` and `/usr/bin/aws_completer` are created
+**only if those paths are free** (see the coexistence section below). The
+`/opt/awscli-v2/bin/aws` path always works regardless of what else is on the
+system.
 
 ### Coexistence with other `aws` installations
 
