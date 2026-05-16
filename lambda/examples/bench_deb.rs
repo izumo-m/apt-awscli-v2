@@ -154,13 +154,19 @@ fn prepare_dist(dist_dir: &str, arch: &str) -> Result<()> {
         format!("{debian_dir}/postinst"),
         include_str!("../metadata/DEBIAN/postinst"),
     )?;
+    std::fs::write(
+        format!("{debian_dir}/prerm"),
+        include_str!("../metadata/DEBIAN/prerm"),
+    )?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(
-            format!("{debian_dir}/postinst"),
-            std::fs::Permissions::from_mode(0o755),
-        )?;
+        for script in ["postinst", "prerm"] {
+            std::fs::set_permissions(
+                format!("{debian_dir}/{script}"),
+                std::fs::Permissions::from_mode(0o755),
+            )?;
+        }
     }
 
     eprintln!("Prepared dist: {dist_dir}");
