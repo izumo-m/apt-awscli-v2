@@ -26,6 +26,14 @@ export function collectFiles(dir: string): string[] {
 
 /**
  * Returns the list of watched files for Lambda source.
+ *
+ * Anything that can change the bytes of the bootstrap binary belongs here:
+ * the Rust source itself, the embedded metadata, dependency manifests, the
+ * Docker build environment (Dockerfile), and the cargo-make recipe
+ * (Makefile.toml). Without the build-infra files, editing the Dockerfile or
+ * build flags would leave a stale cached bootstrap because the source hash
+ * wouldn't change.
+ *
  * @param baseDir  Path to the lambda/ directory (relative or absolute)
  */
 export function watchedFiles(baseDir: string): string[] {
@@ -35,6 +43,8 @@ export function watchedFiles(baseDir: string): string[] {
         path.join(baseDir, "Cargo.toml"),
         path.join(baseDir, "Cargo.lock"),
         path.join(baseDir, "rust-toolchain.toml"),
+        path.join(baseDir, "Dockerfile"),
+        path.join(baseDir, "Makefile.toml"),
     ];
 }
 

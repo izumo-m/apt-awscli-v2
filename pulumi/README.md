@@ -13,7 +13,7 @@ Running `pulumi up` creates the following AWS resources:
 | SSM Parameter Store | GPG signing private key (SecureString) |
 | Lambda Function | Detects new versions, builds deb packages, updates APT index |
 | IAM Roles | Lambda execution role, EventBridge scheduler role |
-| EventBridge Scheduler | Periodic Lambda execution (default: Wed–Sun UTC 0:00) |
+| EventBridge Scheduler | Periodic Lambda execution (default: Tue–Sat UTC 0:00 = Tue–Sat JST 9:00) |
 | CloudWatch Logs | Lambda log retention |
 | SNS Topic + CloudWatch Alarm | Lambda failure email notifications (optional) |
 
@@ -133,7 +133,7 @@ Running `pulumi up` automatically executes the following:
 3. Creates IAM roles and policies (for Lambda and the scheduler)
 4. Builds the Lambda function (via Docker) and deploys it, capturing a source snapshot for later `preview --diff`
 5. Backs up `Pulumi.{stack}.yaml` to the state bucket as a managed `aws.s3.BucketObjectv2`
-6. Configures a schedule (default: Wed–Sun UTC 0:00) using EventBridge Scheduler
+6. Configures a schedule (default: Tue–Sat UTC 0:00 = Tue–Sat JST 9:00) using EventBridge Scheduler
 
 ### Example Pulumi.dev.yaml Configuration
 
@@ -483,7 +483,7 @@ npm run generate-index-html
 | `aptAwscliV2:aptPackages` | | `[aws-cli, session-manager-plugin]` | List of managed packages (`aws-cli` / `session-manager-plugin`) |
 | `aptAwscliV2:lambdaArch` | | `arm64` | Lambda architecture (`x86_64` / `arm64`) |
 | `aptAwscliV2:lambdaMemorySize` | | `5120` | Lambda memory size (MB) |
-| `aptAwscliV2:lambdaEphemeralStorage` | | `512` | Lambda ephemeral storage (MB, 512–10240). Free up to 512MB |
+| `aptAwscliV2:lambdaEphemeralStorage` | | `512` | Lambda ephemeral storage (MB, 512–10240). The first 512MB is included at no additional charge |
 | `aptAwscliV2:lambdaTimeout` | | `900` | Lambda timeout (seconds) |
 | `aptAwscliV2:lambdaThreads` | | `8` | S3 sync / parallel processing thread count |
 | `aptAwscliV2:lambdaZstdThreads` | | `4` | zstd compression thread count |

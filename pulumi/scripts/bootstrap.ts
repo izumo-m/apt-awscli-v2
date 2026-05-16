@@ -38,7 +38,9 @@ Options:
   --backend <url>   S3 backend URL (default: $PULUMI_BACKEND_URL)
   --versioning <n>  S3 object versioning on the state bucket.
                     -1 = keep all versions (unlimited)
-                     0 = disable versioning (default)
+                     0 = suspend versioning (default; old versions are
+                         preserved — AWS does not allow truly disabling
+                         versioning once it has been enabled)
                      N = keep latest N non-current versions.
 
 Environment variables:
@@ -93,8 +95,17 @@ function confirm(question: string): Promise<boolean> {
 
 async function applyVersioning(s3: S3Client, bucket: string, keepVersions: number): Promise<void> {
     if (keepVersions === 0) {
+        // For a previously-versioned bucket we explicitly suspend so new puts
+        // stop creating versions. AWS does not allow truly "disabling"
+        // versioning, only Enabled ↔ Suspended; existing old versions remain
+        // until the user removes them out-of-band.
         console.log("Deleting lifecycle rule...");
         await s3.send(new DeleteBucketLifecycleCommand({ Bucket: bucket }));
+        console.log("Suspending versioning...");
+        await s3.send(new PutBucketVersioningCommand({
+            Bucket: bucket,
+            VersioningConfiguration: { Status: "Suspended" },
+        }));
         return;
     }
 
