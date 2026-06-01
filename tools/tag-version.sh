@@ -4,18 +4,21 @@ set -euo pipefail
 # Create and push a git tag based on the version in pulumi/package.json.
 # Run on the main branch after a successful deploy.
 #
-# Usage: tools/tag-version.sh [--dry-run]
+# Usage: tools/tag-version.sh [--dry-run] [--yes]
 
 cd "$(git rev-parse --show-toplevel)"
 
 dry_run=false
+assume_yes=false
 for arg in "$@"; do
     case "$arg" in
         --dry-run) dry_run=true ;;
+        --yes|-y)  assume_yes=true ;;
         -h|--help)
-            echo "Usage: tools/tag-version.sh [--dry-run]"
+            echo "Usage: tools/tag-version.sh [--dry-run] [--yes]"
             echo "  Create a version tag from pulumi/package.json and push it."
             echo "  Must be run on the main branch."
+            echo "  --yes  Skip the confirmation prompt."
             exit 0
             ;;
         *)
@@ -53,10 +56,12 @@ if $dry_run; then
     exit 0
 fi
 
-read -rp "Push tag $tag? [y/N] " answer
-if [[ "$answer" != [yY] ]]; then
-    echo "Aborted."
-    exit 1
+if ! $assume_yes; then
+    read -rp "Push tag $tag? [y/N] " answer
+    if [[ "$answer" != [yY] ]]; then
+        echo "Aborted."
+        exit 1
+    fi
 fi
 
 git tag "$tag"
