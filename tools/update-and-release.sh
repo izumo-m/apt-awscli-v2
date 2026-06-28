@@ -16,6 +16,12 @@ set -euo pipefail
 # The error message states what was already done so the operator can finish
 # the release manually.
 #
+# Resumable: if a previous run committed and pushed the version bump on
+# develop but then failed during deploy/merge/tag, simply re-run this script.
+# It detects that develop is ahead of main (a pending release), skips the
+# dependency-update and version-bump steps (already done), and continues from
+# the deploy step. Steps 5-9 are idempotent, so resuming is safe.
+#
 # Usage: tools/update-and-release.sh [--dry-run] [--yes]
 
 cd "$(git rev-parse --show-toplevel)"
@@ -159,21 +165,55 @@ else
 fi
 HEAD_AFTER=$(git rev-parse HEAD)
 
-if [[ "$HEAD_BEFORE" == "$HEAD_AFTER" ]] && ! $dry_run; then
+if [[ "$HEAD_BEFORE" != "$HEAD_AFTER" ]]; then
+    updates_made=true
+else
+    updates_made=false
+fi
+
+# Detect a release left unfinished by an earlier run. If develop carries
+# commits that are not yet on main (e.g. a prior run committed the version
+# bump and pushed develop, but then failed at the deploy/merge/tag stage),
+# there is a pending release to resume even when THIS run produced no new
+# dependency commits. `git merge-base --is-ancestor develop main` is true
+# (exit 0) only when every develop commit is already on main, i.e. nothing
+# is pending.
+#
+# Note: this resumes runs that failed at or before the merge step (the common
+# case). A run that failed *after* merging develop into main but before
+# tagging is not auto-detected here; finish those manually with
+# tools/tag-version.sh.
+if git merge-base --is-ancestor develop main; then
+    pending_release=false
+else
+    pending_release=true
+fi
+
+if ! $updates_made && ! $pending_release && ! $dry_run; then
     echo
-    echo "No updates available. Nothing to release."
+    echo "No updates available and nothing pending. Nothing to release."
     exit 0
 fi
 
-# 4. Version bump -------------------------------------------------------------
+if ! $updates_made && $pending_release && ! $dry_run; then
+    echo
+    echo "No new dependency updates, but develop has unreleased commits"
+    echo "ahead of main. Resuming the release of the existing develop state."
+fi
 
-step "Bumping patch version in pulumi/package.json"
+# 4. Version bump -------------------------------------------------------------
+#
+# Only bump when this run created new dependency commits. When resuming a
+# previously-bumped-but-undeployed develop, reuse the existing version so we
+# do not bump twice for the same release.
 
 if $dry_run; then
+    step "Bumping patch version in pulumi/package.json"
     current=$(node -p "require('./pulumi/package.json').version")
     echo "DRY-RUN: would bump pulumi/package.json version from $current"
     new_version="$current"
-else
+elif $updates_made; then
+    step "Bumping patch version in pulumi/package.json"
     # npm version patch updates package.json and package-lock.json and
     # prints "vX.Y.Z" on stdout. --no-git-tag-version skips the implicit
     # commit/tag so we control git ourselves.
@@ -181,6 +221,10 @@ else
     new_version="${raw#v}"
     git add pulumi/package.json pulumi/package-lock.json
     git commit -m "chore: bump version to ${new_version}"
+else
+    # Resuming: develop was already bumped by the earlier (failed) run.
+    new_version=$(node -p "require('./pulumi/package.json').version")
+    step "Resuming release of existing version ${new_version} (no new bump)"
 fi
 
 # 5. Push develop -------------------------------------------------------------

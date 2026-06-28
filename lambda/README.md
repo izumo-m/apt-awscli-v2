@@ -76,9 +76,39 @@ Modifying them changes the source hash, triggering an automatic rebuild and rede
 ## Prerequisites
 
 - Docker
+- Rust toolchain (`cargo`) — required to run `cargo make` / `cargo test`
 - [cargo-make](https://github.com/sagiegurari/cargo-make) (`cargo install cargo-make`)
 
-No Rust or cross-compiler installation is required on the host (builds run inside a Docker container).
+The cross-compiler (musl target) is **not** required on the host — the actual
+build runs inside a Docker container. But `cargo` itself is needed on the host,
+because `cargo make` is a cargo subcommand and the unit tests run with the host
+toolchain.
+
+### Installing the Rust toolchain (`cargo`)
+
+If you get `cargo: command not found`, install Rust via [rustup](https://rustup.rs/):
+
+```bash
+# Linux / macOS / WSL
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+
+# Apply to the current shell (or just restart the shell)
+source "$HOME/.cargo/env"
+
+# Verify
+cargo --version
+```
+
+`rust-toolchain.toml` pins the channel to `stable`, so rustup installs the
+matching toolchain automatically on the first `cargo` invocation in this
+directory.
+
+Then install cargo-make and build:
+
+```bash
+cargo install cargo-make
+cargo make build
+```
 
 ## Tests (UT)
 
