@@ -9,6 +9,6 @@
     "whoami": "wrangler whoami"
   },
   "devDependencies": {
-    "wrangler": "^4.103.0"
+    "wrangler": "^4.105.0"
   }
 }
