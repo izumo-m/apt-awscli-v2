@@ -5,7 +5,8 @@ and run from anywhere in the repo (they `cd` to the git toplevel themselves).
 
 ## `update-and-release.sh`
 
-Full dependency-update + release flow. Run from `develop` with a clean tree.
+Full dependency-update + release flow. Run from `develop` (or from `main` —
+it switches to `develop` automatically) with a clean tree.
 
 ```bash
 tools/update-and-release.sh           # interactive
@@ -15,20 +16,27 @@ tools/update-and-release.sh --yes     # skip all confirmation prompts
 
 Steps:
 
-1. Verify `develop` and `main` are in sync with `origin`, and that a Pulumi
-   stack is selected in `pulumi/`.
+0. Check the required host tools are installed
+   (`git`, `node`, `npm`, `pulumi`, `cargo`, `cargo-make`, `docker`) and that
+   the Docker daemon is running.
+1. Verify a clean tree; auto-switch from `main` to `develop` (any other branch
+   is rejected); verify `develop` and `main` are in sync with `origin`, that
+   Pulumi is logged in, and that a stack is selected in `pulumi/`.
 2. Prompt with the selected stack name (`Pulumi stack: <name>. Proceed? [y/N]`).
 3. Run `update-packages.sh` to bump deps and create per-subproject commits.
-   Exits cleanly if nothing to update.
+   If nothing changed and no release is pending, stop without releasing
+   (returning to the branch you started on).
 4. Bump the patch version in `pulumi/package.json` (and `package-lock.json`),
    commit as `chore: bump version to X.Y.Z`.
 5. Push `develop`.
 6. `pulumi up --yes` then `npm run invoke '{}'` from `pulumi/`. The Lambda
-   bootstrap is rebuilt automatically inside Docker when `lambda/Cargo.lock`
-   changes (see `pulumi/src/check-and-build.ts`).
+   bootstrap is rebuilt automatically inside Docker (via `cargo make`) when
+   `lambda/Cargo.lock` changes (see `pulumi/src/check-and-build.ts`).
 7. Merge `develop` into `main` with `--no-ff` and push `main`.
 8. Tag the release via `tag-version.sh`.
 9. Fast-forward `develop` to `main` and push.
+10. Verify `develop` and `main` converged — identical locally **and** on
+    `origin` — so a dropped final push can't pass for success.
 
 **Failure policy:** on any error the script stops in place. No rollback. The
 log indicates which step failed so you can finish the release manually (for
