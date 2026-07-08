@@ -2,15 +2,20 @@
 set -euo pipefail
 
 # Orchestrate a full maintenance release:
-#   1. Verify preconditions (branches in sync, pulumi stack selected).
+#   0. Check required host tools (git/node/npm/pulumi/cargo/cargo-make/docker)
+#      and that the docker daemon is running.
+#   1. Verify preconditions: clean tree, on develop (auto-switch from main),
+#      develop/main in sync with origin, pulumi logged in and a stack selected.
 #   2. Confirm the pulumi stack with the operator.
 #   3. Run tools/update-packages.sh to bump deps and commit per subproject.
+#      If nothing changed and no release is pending, stop (nothing to release).
 #   4. Bump the patch version in pulumi/package.json and commit.
 #   5. Push develop.
 #   6. Deploy: pulumi up --yes; npm run invoke '{}'.
 #   7. Merge develop into main with --no-ff, push main.
 #   8. Tag the release via tools/tag-version.sh.
 #   9. Fast-forward develop to main and push.
+#  10. Verify develop and main converged (local + origin).
 #
 # Failure policy: on any non-zero exit we stop in place. No rollback.
 # The error message states what was already done so the operator can finish
@@ -36,9 +41,10 @@ for arg in "$@"; do
             cat <<'EOF'
 Usage: tools/update-and-release.sh [--dry-run] [--yes]
 
-  Run the full dependency-update + release flow. Must be on develop with
-  a clean working tree, develop and main in sync with origin, and a
-  pulumi stack already selected in pulumi/.
+  Run the full dependency-update + release flow. Run from develop (or from
+  main, in which case it switches to develop) with a clean working tree,
+  develop and main in sync with origin, and a pulumi stack already selected
+  in pulumi/. Exits without releasing if there are no dependency updates.
 
 Options:
   --dry-run   Show what would happen without modifying any state.
@@ -72,18 +78,79 @@ run() {
     fi
 }
 
+# Fail early with an actionable message if any required executable is missing.
+require_tools() {
+    local missing=()
+    local tool
+    for tool in "$@"; do
+        if ! command -v "$tool" >/dev/null 2>&1; then
+            missing+=("$tool")
+        fi
+    done
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        echo "Error: required tool(s) not found on PATH: ${missing[*]}" >&2
+        echo "Install them before running a release." >&2
+        exit 1
+    fi
+}
+
+# Return to the branch the operator started on. Used to keep dry-runs and
+# no-op runs side-effect free (a real release intentionally ends on main).
+restore_start_branch() {
+    if [[ -n "${START_BRANCH:-}" ]] \
+        && [[ "$(git symbolic-ref --short HEAD)" != "$START_BRANCH" ]]; then
+        git checkout --quiet "$START_BRANCH"
+    fi
+}
+
+# 0. Tooling ------------------------------------------------------------------
+
+step "Checking required tools"
+# Host-side executables the release flow shells out to (directly or via the
+# helper scripts / pulumi program). The lambda bootstrap is cross-compiled
+# inside Docker via `cargo make`, so cargo-make and docker are required too.
+require_tools git node npm pulumi cargo cargo-make docker
+echo "Tools present: git node npm pulumi cargo cargo-make docker"
+
+# Docker must be running: `pulumi up` builds the lambda bootstrap in a
+# container (lambda/Makefile.toml).
+if ! docker info >/dev/null 2>&1; then
+    echo "Error: docker daemon is not running or not reachable." >&2
+    echo "Start Docker; the lambda bootstrap is built in a container during 'pulumi up'." >&2
+    exit 1
+fi
+
+# Helper scripts this orchestrator drives must exist and be executable.
+for helper in tools/update-packages.sh tools/tag-version.sh; do
+    if [[ ! -x "$helper" ]]; then
+        echo "Error: required helper not found or not executable: $helper" >&2
+        exit 1
+    fi
+done
+
 # 1. Preconditions ------------------------------------------------------------
 
 step "Preconditions"
 
-branch=$(git symbolic-ref --short HEAD)
-if [[ "$branch" != "develop" ]]; then
-    echo "Error: must be on develop branch (current: $branch)" >&2
+# Check the tree is clean before touching branches: a dirty tree would be
+# dragged along by the develop checkout below.
+if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
+    echo "Error: working tree is not clean" >&2
     exit 1
 fi
 
-if [[ -n "$(git status --porcelain --untracked-files=no)" ]]; then
-    echo "Error: working tree is not clean" >&2
+# The release runs on develop. Sitting on main with develop pointing at the
+# same commit is a normal ready-state, so switch to develop transparently.
+# Any other branch is refused rather than guessed at.
+START_BRANCH=$(git symbolic-ref --short HEAD)
+branch="$START_BRANCH"
+if [[ "$branch" == "main" ]]; then
+    echo "On main; switching to develop for the release..."
+    git checkout --quiet develop
+    branch=$(git symbolic-ref --short HEAD)
+fi
+if [[ "$branch" != "develop" ]]; then
+    echo "Error: must be on develop or main (current: $START_BRANCH)" >&2
     exit 1
 fi
 
@@ -192,6 +259,7 @@ fi
 if ! $updates_made && ! $pending_release && ! $dry_run; then
     echo
     echo "No updates available and nothing pending. Nothing to release."
+    restore_start_branch
     exit 0
 fi
 
@@ -274,8 +342,40 @@ step "Fast-forwarding develop to main"
 run git branch -f develop main
 run git push origin develop
 
+# 10. Post-release verification -----------------------------------------------
+#
+# The release only counts as done if develop and main converged: main holds
+# the merge commit and develop was fast-forwarded onto it. Confirm locally and
+# on origin so a silent divergence (e.g. a dropped final push) can't pass for
+# success.
+
+step "Verifying develop == main"
+if $dry_run; then
+    echo "DRY-RUN: skipping post-release develop/main convergence check"
+else
+    dev_sha=$(git rev-parse develop)
+    main_sha=$(git rev-parse main)
+    if [[ "$dev_sha" != "$main_sha" ]]; then
+        echo "Error: post-release develop and main differ locally" >&2
+        echo "  develop: $dev_sha" >&2
+        echo "  main   : $main_sha" >&2
+        exit 1
+    fi
+    git fetch origin --quiet
+    if [[ "$(git rev-parse origin/develop)" != "$main_sha" \
+        || "$(git rev-parse origin/main)" != "$main_sha" ]]; then
+        echo "Error: origin develop/main are not both at the released commit" >&2
+        echo "  released      : $main_sha" >&2
+        echo "  origin/main   : $(git rev-parse origin/main)" >&2
+        echo "  origin/develop: $(git rev-parse origin/develop)" >&2
+        exit 1
+    fi
+    echo "OK: local & origin develop and main are all at $main_sha"
+fi
+
 echo
 if $dry_run; then
+    restore_start_branch
     echo "Dry run complete."
 else
     echo "Release ${new_version} complete."
