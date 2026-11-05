@@ -2,11 +2,13 @@
   "name": "apt-awscli-v2-cloudflare",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
   "description": "Worker source and local dev tooling. Production deployment is managed by Pulumi (see ../pulumi/src/cloudflare.ts).",
   "scripts": {
     "dev": "wrangler dev",
     "tail": "wrangler tail apt-awscli-v2-proxy",
-    "whoami": "wrangler whoami"
+    "whoami": "wrangler whoami",
+    "test": "node --test"
   },
   "devDependencies": {
     "wrangler": "^4.129.0"

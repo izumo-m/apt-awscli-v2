@@ -9,3 +9,10 @@ compatibility_date = "2026-04-19"
 #
 # For `wrangler dev`, set ORIGIN_BASE_URL in cloudflare/.dev.vars (gitignored).
 
+
+# Optional request analytics (Workers Analytics Engine). In production the
+# binding is added by Pulumi when aptAwscliV2:cloudflareAnalyticsEnabled=true.
+# Uncomment to exercise the recording code path under `wrangler dev`:
+# [[analytics_engine_datasets]]
+# binding = "ANALYTICS"
+# dataset = "apt_awscli_v2_dev_requests"

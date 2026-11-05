@@ -17,6 +17,7 @@
     "cf-config:set": "ts-node scripts/cf-config.ts set",
     "cf-config:show": "ts-node scripts/cf-config.ts show",
     "cf-purge": "ts-node scripts/cf-purge.ts",
+    "cf-analytics": "ts-node scripts/cf-analytics.ts",
     "test": "vitest run"
   },
   "dependencies": {

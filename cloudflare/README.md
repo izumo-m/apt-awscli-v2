@@ -18,10 +18,27 @@ deployment, custom domain setup, token permissions, and cache purge.
 | File           | Purpose                                                                              |
 |----------------|--------------------------------------------------------------------------------------|
 | `index.js`     | Worker source (master). Pulumi reads this file at `pulumi up` time.                  |
+| `index.test.js` | Worker tests (`npm test`, uses `node:test`).                                        |
 | `wrangler.toml`| Minimal config for `wrangler dev` / `wrangler tail`. No deploy settings here.        |
-| `package.json` | Pins wrangler and exposes `dev` / `tail` / `whoami`.                                 |
+| `package.json` | Pins wrangler and exposes `dev` / `tail` / `whoami` / `test`.                        |
 | `.dev.vars`    | Gitignored. Holds `ORIGIN_BASE_URL` for local `wrangler dev`.                        |
 | `.dev.vars.example` | Template for `.dev.vars`.                                                       |
+
+## Request Analytics (optional)
+
+When the Worker has an `ANALYTICS` binding (Workers Analytics Engine), it
+writes one data point per proxied request; without the binding it records
+nothing. In production Pulumi adds the binding when
+`aptAwscliV2:cloudflareAnalyticsEnabled=true` — see
+[`../pulumi/README.md`](../pulumi/README.md) §Request Analytics. The column
+layout is documented at `buildDataPoint` in `index.js`.
+
+## Tests
+
+```bash
+cd cloudflare
+npm test
+```
 
 ## Local Development
 
@@ -82,3 +99,7 @@ npx wrangler login    # opens browser for OAuth (operator-only, one-time)
 `wrangler dev` reads `wrangler.toml` for the script name / module entry, so
 the local environment matches production except for bindings (which come
 from `.dev.vars` locally instead of from Pulumi).
+
+`.dev.vars` does not cover the Analytics Engine binding; uncomment the
+`[[analytics_engine_datasets]]` block in `wrangler.toml` to run the recording
+code path under `wrangler dev`.

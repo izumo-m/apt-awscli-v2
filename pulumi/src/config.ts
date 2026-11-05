@@ -93,6 +93,10 @@ export interface AppConfig {
     // Opt-in override for the public base URL Lambda uses to construct
     // purge URLs. If unset, derived as `https://${cloudflareCustomDomain}`.
     cloudflarePublicBaseUrl:  string | undefined;
+    // Opt-in add-on (aptAwscliV2:cloudflareAnalyticsEnabled): Workers
+    // Analytics Engine dataset the Worker records requests into. Undefined
+    // when the add-on (or Cloudflare itself) is disabled.
+    cloudflareAnalyticsDataset: string | undefined;
 }
 
 export function loadConfig(): AppConfig {
@@ -126,30 +130,35 @@ export function loadConfig(): AppConfig {
 }
 
 interface CloudflareConfig {
-    cloudflareEnabled:        boolean;
-    cloudflareAccountId:      string | undefined;
-    cloudflareZoneId:         string | undefined;
-    cloudflareSsmParam:       string | undefined;
-    cloudflareCustomDomain:   string | undefined;
-    cloudflarePublicBaseUrl:  string | undefined;
+    cloudflareEnabled:          boolean;
+    cloudflareAccountId:        string | undefined;
+    cloudflareZoneId:           string | undefined;
+    cloudflareSsmParam:         string | undefined;
+    cloudflareCustomDomain:     string | undefined;
+    cloudflarePublicBaseUrl:    string | undefined;
+    cloudflareAnalyticsDataset: string | undefined;
 }
 
 function loadCloudflareConfig(config: pulumi.Config, resourcePrefix: string): CloudflareConfig {
-    const enabled         = config.getBoolean("cloudflareEnabled") ?? false;
-    const accountId       = config.get("cloudflareAccountId");
-    const zoneId          = config.get("cloudflareZoneId");
-    const ssmParam        = config.get("cloudflareSsmParam");
-    const customDomain    = config.get("cloudflareCustomDomain");
-    const publicBaseUrl   = config.get("cloudflarePublicBaseUrl");
+    const enabled          = config.getBoolean("cloudflareEnabled") ?? false;
+    const accountId        = config.get("cloudflareAccountId");
+    const zoneId           = config.get("cloudflareZoneId");
+    const ssmParam         = config.get("cloudflareSsmParam");
+    const customDomain     = config.get("cloudflareCustomDomain");
+    const publicBaseUrl    = config.get("cloudflarePublicBaseUrl");
+    const analyticsEnabled = config.getBoolean("cloudflareAnalyticsEnabled") ?? false;
+    const analyticsDataset = config.get("cloudflareAnalyticsDataset");
 
     if (!enabled) {
         // Cloudflare disabled: warn if any Cloudflare-specific keys are set.
         const stray = [
-            accountId      ? "cloudflareAccountId"     : "",
-            zoneId         ? "cloudflareZoneId"        : "",
-            ssmParam       ? "cloudflareSsmParam"      : "",
-            customDomain   ? "cloudflareCustomDomain"  : "",
-            publicBaseUrl  ? "cloudflarePublicBaseUrl" : "",
+            accountId        ? "cloudflareAccountId"        : "",
+            zoneId           ? "cloudflareZoneId"           : "",
+            ssmParam         ? "cloudflareSsmParam"         : "",
+            customDomain     ? "cloudflareCustomDomain"     : "",
+            publicBaseUrl    ? "cloudflarePublicBaseUrl"    : "",
+            analyticsEnabled ? "cloudflareAnalyticsEnabled" : "",
+            analyticsDataset ? "cloudflareAnalyticsDataset" : "",
         ].filter(s => s.length > 0);
         if (stray.length > 0) {
             pulumi.log.warn(
@@ -157,13 +166,20 @@ function loadCloudflareConfig(config: pulumi.Config, resourcePrefix: string): Cl
             );
         }
         return {
-            cloudflareEnabled:       false,
-            cloudflareAccountId:     undefined,
-            cloudflareZoneId:        undefined,
-            cloudflareSsmParam:      undefined,
-            cloudflareCustomDomain:  undefined,
-            cloudflarePublicBaseUrl: undefined,
+            cloudflareEnabled:          false,
+            cloudflareAccountId:        undefined,
+            cloudflareZoneId:           undefined,
+            cloudflareSsmParam:         undefined,
+            cloudflareCustomDomain:     undefined,
+            cloudflarePublicBaseUrl:    undefined,
+            cloudflareAnalyticsDataset: undefined,
         };
+    }
+
+    if (!analyticsEnabled && analyticsDataset) {
+        pulumi.log.warn(
+            "cloudflareAnalyticsDataset is set but cloudflareAnalyticsEnabled is false; ignoring",
+        );
     }
 
     // Cloudflare enabled: enforce required fields.
@@ -180,13 +196,37 @@ function loadCloudflareConfig(config: pulumi.Config, resourcePrefix: string): Cl
     }
 
     return {
-        cloudflareEnabled:       true,
-        cloudflareAccountId:     accountId,
-        cloudflareZoneId:        zoneId,
-        cloudflareSsmParam:      ssmParam ?? `/${resourcePrefix}/cloudflare`,
-        cloudflareCustomDomain:  customDomain,
-        cloudflarePublicBaseUrl: publicBaseUrl,
+        cloudflareEnabled:          true,
+        cloudflareAccountId:        accountId,
+        cloudflareZoneId:           zoneId,
+        cloudflareSsmParam:         ssmParam ?? `/${resourcePrefix}/cloudflare`,
+        cloudflareCustomDomain:     customDomain,
+        cloudflarePublicBaseUrl:    publicBaseUrl,
+        cloudflareAnalyticsDataset: analyticsEnabled
+            ? resolveAnalyticsDataset(analyticsDataset, resourcePrefix)
+            : undefined,
     };
+}
+
+// Dataset names double as SQL table names in the Analytics Engine SQL API,
+// so keep them to identifier characters.
+const ANALYTICS_DATASET_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Resolve the Analytics Engine dataset name: the explicit
+ * aptAwscliV2:cloudflareAnalyticsDataset, or `<resourcePrefix>_requests`
+ * with non-identifier characters replaced by "_"
+ * (e.g. apt-awscli-v2 -> apt_awscli_v2_requests).
+ */
+export function resolveAnalyticsDataset(explicit: string | undefined, resourcePrefix: string): string {
+    const name = explicit ?? `${resourcePrefix.replace(/[^A-Za-z0-9_]/g, "_")}_requests`;
+    if (!ANALYTICS_DATASET_RE.test(name)) {
+        throw new Error(
+            `Invalid Analytics Engine dataset name: "${name}". Use letters, digits and "_" ` +
+            `(not starting with a digit); set aptAwscliV2:cloudflareAnalyticsDataset to override.`,
+        );
+    }
+    return name;
 }
 
 /** Resolve the public base URL Lambda will use to build purge URLs. */

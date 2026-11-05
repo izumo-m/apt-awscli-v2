@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
     AppConfig,
+    resolveAnalyticsDataset,
     resolvePublicBaseUrl,
     validateAptArches,
     validateAptPackages,
@@ -122,5 +123,26 @@ describe("resolvePublicBaseUrl", () => {
 
     it("returns undefined when neither is set even though Cloudflare is enabled", () => {
         expect(resolvePublicBaseUrl(make({ cloudflareEnabled: true }))).toBeUndefined();
+    });
+});
+
+describe("resolveAnalyticsDataset", () => {
+    it("derives <resourcePrefix>_requests with hyphens replaced", () => {
+        expect(resolveAnalyticsDataset(undefined, "apt-awscli-v2")).toBe("apt_awscli_v2_requests");
+        expect(resolveAnalyticsDataset(undefined, "apt-awscli-v2-dev")).toBe("apt_awscli_v2_dev_requests");
+    });
+
+    it("uses the explicit name when set", () => {
+        expect(resolveAnalyticsDataset("my_dataset", "apt-awscli-v2")).toBe("my_dataset");
+    });
+
+    it("rejects explicit names that are not SQL identifiers", () => {
+        expect(() => resolveAnalyticsDataset("my-dataset", "apt-awscli-v2")).toThrow(/Invalid Analytics Engine dataset/);
+        expect(() => resolveAnalyticsDataset("1dataset", "apt-awscli-v2")).toThrow(/Invalid Analytics Engine dataset/);
+        expect(() => resolveAnalyticsDataset("", "apt-awscli-v2")).toThrow(/Invalid Analytics Engine dataset/);
+    });
+
+    it("rejects a derived name that starts with a digit", () => {
+        expect(() => resolveAnalyticsDataset(undefined, "1apt")).toThrow(/cloudflareAnalyticsDataset/);
     });
 });
