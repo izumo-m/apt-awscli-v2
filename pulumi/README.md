@@ -465,6 +465,7 @@ npm run generate-index-html
 | `npm run cf-config:show` | Read back Cloudflare credentials from SSM (token redacted) |
 | `npm run cf-purge -- --prefix <path>` | Manually purge Cloudflare cache under a path prefix |
 | `npm run cf-purge -- --all` | Manually purge the entire Cloudflare zone |
+| `npm run cf-analytics` | Summarize Worker request analytics (`--days N`, `--exclude <network>`, `--sql <query>`) |
 | `npm test` | Run pure-function unit tests (vitest) |
 
 ## Tests
@@ -478,9 +479,16 @@ npm test
 
 They cover the helpers that are easy to exercise in isolation
 (`parseS3Uri`, `deriveOriginUrl`, `validateAptArches`, `validateAptPackages`,
-`validateLambdaArch`, `resolvePublicBaseUrl`). Pulumi resource construction
-is not unit-tested — `pulumi preview` against a dev stack is the integration
-test for that path.
+`validateLambdaArch`, `resolvePublicBaseUrl`, `resolveAnalyticsDataset`).
+Pulumi resource construction is not unit-tested — `pulumi preview` against a
+dev stack is the integration test for that path.
+
+The Worker has its own tests (`node:test`, no extra dependencies):
+
+```bash
+cd cloudflare
+npm test
+```
 
 ## Pulumi Config Key Reference
 
@@ -514,6 +522,8 @@ test for that path.
 | `aptAwscliV2:cloudflareSsmParam` | | `/<resourcePrefix>/cloudflare` | SSM SecureString parameter name holding `{"api_token":"..."}` for Lambda cache purge. Override only when sharing parameters across stacks |
 | `aptAwscliV2:cloudflareCustomDomain` | | Disabled | Opt-in. Hostname (e.g. `apt-awscli-v2.example.com`). When set, Pulumi binds a `WorkersCustomDomain` and DNS/SSL are auto-managed by Cloudflare |
 | `aptAwscliV2:cloudflarePublicBaseUrl` | | Derived | Opt-in override for the URL Lambda uses to build purge URLs. Defaults to `https://${cloudflareCustomDomain}` |
+| `aptAwscliV2:cloudflareAnalyticsEnabled` | | `false` | Opt-in add-on. When `true` (and `cloudflareEnabled=true`), the Worker records request analytics to Workers Analytics Engine. See [Request Analytics](#request-analytics-opt-in-add-on) |
+| `aptAwscliV2:cloudflareAnalyticsDataset` | | `<resourcePrefix>_requests` | Analytics Engine dataset name (letters, digits, `_`). The default replaces `-` with `_` (e.g. `apt_awscli_v2_requests`) |
 
 ## Cloudflare Operations
 
@@ -523,6 +533,9 @@ Lambda invalidates the matching edge cache after each S3 update.
 
 When disabled (default), no Cloudflare resources are created and the Lambda
 skips cache invalidation entirely.
+
+Request analytics is a separate opt-in add-on on top of this; see
+[Request Analytics](#request-analytics-opt-in-add-on).
 
 ### Architecture
 
@@ -572,6 +585,14 @@ Cloudflare dashboard.
 
 This token has no other powers — even if the Lambda is compromised, the
 attacker cannot deploy or modify the Worker.
+
+**Analytics token (optional, only for `npm run cf-analytics`):**
+
+| Permission | Scope |
+|-----------|-------|
+| `Account → Account Analytics: Read` | target account |
+
+See [Request Analytics](#request-analytics-opt-in-add-on).
 
 ### SSM JSON Schema
 
@@ -669,6 +690,61 @@ npm run cf-purge -- --all                      # purge entire zone
 
 The tool lists matching S3 objects, converts each key to a public URL, and
 sends per-URL purge requests in batches of 30 (Cloudflare Free plan limit).
+
+### Request Analytics (Opt-in Add-on)
+
+The Worker can record one data point per request in
+[Workers Analytics Engine](https://developers.cloudflare.com/analytics/analytics-engine/),
+which lets you estimate how many machines use the repository. S3 access
+logs cannot answer that: the Worker does not forward client IPs or
+User-Agents to S3, and cache hits never reach S3.
+
+The add-on only takes effect when `cloudflareEnabled=true`. When it is off,
+the Worker has no `ANALYTICS` binding and records nothing.
+
+```bash
+pulumi config set aptAwscliV2:cloudflareAnalyticsEnabled true
+pulumi up
+```
+
+The operator token needs no extra permission, and Cloudflare creates the
+dataset (default `<resourcePrefix>_requests`, e.g. `apt_awscli_v2_requests`)
+on the first write. The Workers Free plan includes 100,000 data points per
+day, and data is kept for three months.
+
+**What is recorded** (column layout is also documented in
+[`cloudflare/index.js`](../cloudflare/index.js); columns are positional):
+
+| Column | Content |
+|--------|---------|
+| `index1` | Client network: IPv4 `/24` or IPv6 `/48`. Full IP addresses are not stored |
+| `blob1` | Kind: `deb` / `dists` / `key` (`public.key`) / `html` (`index.html`) / `other` |
+| `blob2` | Request path |
+| `blob3`–`blob5` | Package name, version, architecture (`.deb`; architecture also for `dists/.../binary-<arch>/`) |
+| `blob6` | APT version from the User-Agent (empty for non-APT clients) |
+| `blob7` | User-Agent |
+| `blob8`–`blob10` | Country, Cloudflare colo, AS organization |
+| `blob11` | HTTP method |
+| `blob12` | `CF-Cache-Status` of the origin fetch |
+| `double1`–`double3` | HTTP status, response bytes, ASN |
+
+**Querying.** Create a token with `Account → Account Analytics: Read` and run:
+
+```bash
+export CLOUDFLARE_ANALYTICS_TOKEN=<analytics-read-token>   # falls back to CLOUDFLARE_API_TOKEN
+npm run cf-analytics                                       # last 30 days
+npm run cf-analytics -- --days 7 --exclude 203.0.113.0/24  # exclude your own network (repeatable)
+npm run cf-analytics -- --sql "SELECT blob2 AS path, SUM(_sample_interval) AS n
+  FROM {dataset} WHERE blob1 = 'deb' GROUP BY path ORDER BY n DESC"
+```
+
+The default report shows requests by kind, APT clients per day, `.deb`
+downloads per package and architecture, APT versions, and the top APT client
+networks. APT requests are identified by the `APT-HTTP` User-Agent.
+
+Counts are **networks, not people**: machines behind the same NAT or `/24`
+are merged, and CI runners that use many addresses are counted several
+times. Exclude your own networks with `--exclude` to see external usage.
 
 ## Resource Name Derivation Rules
 

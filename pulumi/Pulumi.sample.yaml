@@ -41,3 +41,10 @@ config:
   # aptAwscliV2:cloudflareSsmParam:  /custom/path/cloudflare    # Optional. SSM SecureString holding {"api_token":"..."} for Lambda cache purge. Defaults to /<resourcePrefix>/cloudflare.
   # aptAwscliV2:cloudflareCustomDomain:   apt-awscli-v2.example.com  # Opt-in. Pulumi creates a WorkersCustomDomain when set.
   # aptAwscliV2:cloudflarePublicBaseUrl:  https://apt-awscli-v2.example.com  # Opt-in override. Defaults to https://${cloudflareCustomDomain}.
+  #
+  # Opt-in add-on (requires cloudflareEnabled): the Worker records one
+  # Workers Analytics Engine data point per request (path, User-Agent,
+  # country, client network truncated to /24 or /48). Kept for 3 months.
+  # Query with `npm run cf-analytics`.
+  # aptAwscliV2:cloudflareAnalyticsEnabled: "true"
+  # aptAwscliV2:cloudflareAnalyticsDataset: my_requests  # Optional. Defaults to <resourcePrefix>_requests ("-" replaced by "_").

@@ -90,3 +90,4 @@ export const lambdaFunctionName    = lambdaFn.name;
 export const lambdaFunctionArn     = lambdaFn.arn;
 export const lambdaRoleArn         = lambdaRole.arn;
 export const logGroupNameOutput    = logGroup.name;
+export const cloudflareAnalyticsDataset = cfg.cloudflareAnalyticsDataset;

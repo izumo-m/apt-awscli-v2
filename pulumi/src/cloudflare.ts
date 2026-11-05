@@ -8,6 +8,10 @@
  *                               script name is `${resourcePrefix}-proxy` so
  *                               dev and prod stacks do not overwrite each
  *                               other in a shared Cloudflare account.
+ *                               When cloudflareAnalyticsEnabled is true, an
+ *                               ANALYTICS binding to a Workers Analytics
+ *                               Engine dataset is added (the dataset is
+ *                               created by Cloudflare on first write).
  *   - WorkersCustomDomain     — created only when cloudflareCustomDomain is set
  *
  * Does NOT manage:
@@ -64,19 +68,30 @@ export function createCloudflareWorker(cfg: AppConfig): CloudflareResult {
     // ORIGIN_BASE_URL is treated as a secret because production deployments
     // include a random UUID prefix in s3Uri to prevent direct S3 access
     // (EDoS mitigation). Leaking the origin URL would defeat that gate.
+    const bindings: cloudflare.types.input.WorkersScriptBinding[] = [
+        {
+            type: "secret_text",
+            name: "ORIGIN_BASE_URL",
+            text: originUrl,
+        },
+    ];
+    // Optional add-on: request analytics. The Worker only records data
+    // points when this binding exists.
+    if (cfg.cloudflareAnalyticsDataset) {
+        bindings.push({
+            type:    "analytics_engine",
+            name:    "ANALYTICS",
+            dataset: cfg.cloudflareAnalyticsDataset,
+        });
+    }
+
     const script = new cloudflare.WorkersScript(`${cfg.resourcePrefix}-worker`, {
         accountId,
         scriptName,
         content,
         mainModule:        "index.js",
         compatibilityDate: WORKER_COMPATIBILITY_DATE,
-        bindings: [
-            {
-                type: "secret_text",
-                name: "ORIGIN_BASE_URL",
-                text: originUrl,
-            },
-        ],
+        bindings,
     });
 
     // Optional: bind a custom domain so the Worker is reachable at
